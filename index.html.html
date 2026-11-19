@@ -1,0 +1,519 @@
+<!DOCTYPE html>
+<html lang="es" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>CorsaTracker UA — Control de Viajes y Diésel</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Google Fonts: Inter -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <!-- Chart.js para la gráfica comparativa -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'system-ui', 'sans-serif'],
+          },
+          colors: {
+            corsa: {
+              dark: '#0b0f19',
+              card: '#131a2a',
+              border: '#1f293d',
+              accent: '#06b6d4',
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    body {
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      -webkit-tap-highlight-color: transparent;
+    }
+    /* Custom scrollbar suave */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: rgba(148, 163, 184, 0.3);
+      border-radius: 9999px;
+    }
+    /* Evitar zoom en inputs iOS */
+    input, select, textarea {
+      font-size: 16px !important;
+    }
+    @media (min-width: 768px) {
+      input, select, textarea {
+        font-size: 14px !important;
+      }
+    }
+  </style>
+</head>
+<body class="bg-slate-100 text-slate-900 dark:bg-corsa-dark dark:text-slate-100 min-h-screen transition-colors duration-200 pb-24 md:pb-12">
+
+  <!-- Toast / Notificación flotante (reemplazo seguro de alert/confirm) -->
+  <div id="toast-container" class="fixed top-4 right-4 left-4 md:left-auto md:w-96 z-50 flex flex-col gap-2 pointer-events-none"></div>
+
+  <!-- Modal de Confirmación Personalizado -->
+  <div id="confirm-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+    <div class="bg-white dark:bg-corsa-card border border-slate-200 dark:border-corsa-border rounded-2xl max-w-sm w-full p-6 shadow-2xl transform transition-all">
+      <div class="flex items-center gap-3 mb-3">
+        <div class="w-10 h-10 rounded-full bg-rose-500/15 text-rose-500 flex items-center justify-center shrink-0">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+        </div>
+        <h3 id="confirm-title" class="text-lg font-bold">¿Confirmar acción?</h3>
+      </div>
+      <p id="confirm-message" class="text-sm text-slate-600 dark:text-slate-400 mb-6">Esta acción no se puede deshacer.</p>
+      <div class="flex gap-3 justify-end">
+        <button id="confirm-cancel" class="px-4 py-2.5 rounded-xl text-sm font-medium bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 transition">Cancelar</button>
+        <button id="confirm-ok" class="px-4 py-2.5 rounded-xl text-sm font-semibold bg-rose-600 hover:bg-rose-500 text-white transition">Eliminar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal de Ajustes del Vehículo y Ruta -->
+  <div id="settings-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/70 backdrop-blur-sm p-4 overflow-y-auto">
+    <div class="bg-white dark:bg-corsa-card border border-slate-200 dark:border-corsa-border rounded-2xl max-w-md w-full p-6 shadow-2xl my-auto">
+      <div class="flex items-center justify-between mb-5">
+        <div class="flex items-center gap-2.5">
+          <span class="p-2 rounded-xl bg-cyan-500/15 text-cyan-500">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+          </span>
+          <div>
+            <h3 class="text-lg font-bold">Ajustes del Corsa y Ruta</h3>
+            <p class="text-xs text-slate-500 dark:text-slate-400">Opel Corsa D 1.3 CDTI (2007)</p>
+          </div>
+        </div>
+        <button onclick="closeSettingsModal()" class="p-2 rounded-xl text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+        </button>
+      </div>
+
+      <form id="settings-form" class="space-y-4">
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">Km Ida + Vuelta</label>
+            <input type="number" step="0.1" id="cfg-km-round" required class="w-full px-3.5 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 focus:border-cyan-500 focus:outline-none font-semibold" />
+          </div>
+          <div>
+            <label class="block text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">Consumo (L/100km)</label>
+            <input type="number" step="0.1" id="cfg-consumption" required class="w-full px-3.5 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 focus:border-cyan-500 focus:outline-none font-semibold" />
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">Tarifa Pasajero (€)</label>
+            <input type="number" step="0.05" id="cfg-fare" required class="w-full px-3.5 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 focus:border-cyan-500 focus:outline-none font-semibold" />
+          </div>
+          <div>
+            <label class="block text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">Precio Diésel (€/L)</label>
+            <input type="number" step="0.001" id="cfg-diesel-price" required class="w-full px-3.5 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 focus:border-cyan-500 focus:outline-none font-semibold" />
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">Meta Semanal de Trayectos</label>
+          <input type="number" step="1" id="cfg-weekly-goal" required class="w-full px-3.5 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 focus:border-cyan-500 focus:outline-none font-semibold" />
+          <p class="text-xs text-slate-500 mt-1">Con 64 km × 4 días a ~1,70 €/L, 14 trayectos (21 €) cubren el 100% del diésel.</p>
+        </div>
+
+        <div class="pt-3 border-t border-slate-200 dark:border-slate-800 flex flex-col gap-2">
+          <button type="submit" class="w-full py-3 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white font-semibold transition shadow-lg shadow-cyan-600/20">
+            Guardar Configuración
+          </button>
+          <button type="button" onclick="loadDemoDataPrompt()" class="w-full py-2.5 rounded-xl bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-300 transition">
+            Cargar semana de ejemplo (para probar)
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Barra Superior (Header) -->
+  <header class="sticky top-0 z-30 bg-white/85 dark:bg-corsa-dark/85 backdrop-blur-md border-b border-slate-200 dark:border-corsa-border">
+    <div class="max-w-5xl mx-auto px-4 h-16 flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-cyan-500 to-emerald-500 flex items-center justify-center text-white font-extrabold shadow-lg shadow-cyan-500/20">
+          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+        </div>
+        <div>
+          <div class="flex items-center gap-2">
+            <h1 class="font-extrabold text-base sm:text-lg tracking-tight leading-none">CorsaTracker <span class="text-cyan-500">UA</span></h1>
+            <span class="hidden sm:inline-block text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400">1.3 CDTI '07</span>
+          </div>
+          <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Santa Pola ↔ Univ. Alicante · <span id="header-ref-price" class="font-semibold text-amber-500">1,699 €/L</span></p>
+        </div>
+      </div>
+
+      <div class="flex items-center gap-2">
+        <!-- Toggle Tema Claro/Oscuro -->
+        <button id="theme-toggle" title="Cambiar tema" class="p-2.5 rounded-xl bg-slate-200/70 dark:bg-slate-800/80 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 transition">
+          <svg id="icon-sun" class="w-5 h-5 hidden dark:block text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
+          <svg id="icon-moon" class="w-5 h-5 block dark:hidden text-slate-700" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/></svg>
+        </button>
+        <!-- Botón Ajustes -->
+        <button onclick="openSettingsModal()" title="Ajustes" class="p-2.5 rounded-xl bg-slate-200/70 dark:bg-slate-800/80 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 transition flex items-center gap-1.5">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+          <span class="hidden sm:inline text-xs font-semibold">Ajustes</span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Contenido Principal -->
+  <main class="max-w-5xl mx-auto px-4 pt-5 space-y-6">
+
+    <!-- 1. PANEL RESUMEN (DASHBOARD SUPERIOR) -->
+    <section aria-label="Resumen Financiero" class="space-y-4">
+      <!-- Tarjetas Principales de Balance -->
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <!-- Balance Real de Caja (Ingresos vs Repostajes Pagados) -->
+        <div class="relative overflow-hidden rounded-2xl bg-white dark:bg-corsa-card border border-slate-200 dark:border-corsa-border p-5 shadow-sm">
+          <div class="flex items-start justify-between">
+            <div>
+              <span class="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Balance Real (Caja vs Surtidor)</span>
+              <div class="flex items-baseline gap-2.5 mt-1">
+                <h2 id="kpi-net-real" class="text-3xl sm:text-4xl font-extrabold tracking-tight">0,00 €</h2>
+                <span id="kpi-net-real-badge" class="text-xs font-bold px-2.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-500">Equilibrado</span>
+              </div>
+              <p class="text-xs text-slate-500 dark:text-slate-400 mt-1.5">
+                Ingresado: <strong id="kpi-total-income" class="text-emerald-500">0,00 €</strong> · Repostado: <strong id="kpi-total-fuel-spent" class="text-amber-500">0,00 €</strong>
+              </p>
+            </div>
+            <div class="p-3 rounded-2xl bg-emerald-500/10 text-emerald-500">
+              <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+            </div>
+          </div>
+          <!-- Sub-detalle del Mes Actual -->
+          <div class="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between text-xs">
+            <span class="text-slate-500 dark:text-slate-400">Balance Mes Actual (<span id="current-month-name" class="capitalize font-medium"></span>):</span>
+            <span id="kpi-month-net" class="font-bold text-sm">0,00 €</span>
+          </div>
+        </div>
+
+        <!-- Balance Operativo por Km (Ingresos vs Diésel Consumido Estimado) -->
+        <div class="relative overflow-hidden rounded-2xl bg-white dark:bg-corsa-card border border-slate-200 dark:border-corsa-border p-5 shadow-sm">
+          <div class="flex items-start justify-between">
+            <div>
+              <span class="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Rentabilidad Real por Trayectos</span>
+              <div class="flex items-baseline gap-2.5 mt-1">
+                <h2 id="kpi-net-operational" class="text-3xl sm:text-4xl font-extrabold tracking-tight">0,00 €</h2>
+                <span id="kpi-op-badge" class="text-xs font-bold px-2.5 py-0.5 rounded-full bg-cyan-500/15 text-cyan-500">0,00 €/km</span>
+              </div>
+              <p class="text-xs text-slate-500 dark:text-slate-400 mt-1.5">
+                Diésel consumido en ruta: <strong id="kpi-est-fuel-cost" class="text-rose-400">0,00 €</strong> (<span id="kpi-total-km">0</span> km)
+              </p>
+            </div>
+            <div class="p-3 rounded-2xl bg-cyan-500/10 text-cyan-500">
+              <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+            </div>
+          </div>
+          <!-- Pendientes de Bizum -->
+          <div class="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between text-xs">
+            <span class="text-slate-500 dark:text-slate-400">Pendiente de cobrar (Bizum):</span>
+            <span id="kpi-pending-bizum" class="font-bold text-amber-500">0,00 €</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- KPIs Secundarios (4 columnas en desktop, 2x2 en móvil) -->
+      <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <div class="rounded-2xl bg-white dark:bg-corsa-card border border-slate-200 dark:border-corsa-border p-4">
+          <p class="text-xs font-medium text-slate-500 dark:text-slate-400">Plazas Llevadas</p>
+          <p id="kpi-total-seats" class="text-2xl font-extrabold mt-1">0</p>
+          <p class="text-[11px] text-slate-400 mt-0.5"><span id="kpi-avg-seats">0,0</span> plazas/día de media</p>
+        </div>
+        <div class="rounded-2xl bg-white dark:bg-corsa-card border border-slate-200 dark:border-corsa-border p-4">
+          <p class="text-xs font-medium text-slate-500 dark:text-slate-400">Litros Repostados</p>
+          <p id="kpi-total-liters" class="text-2xl font-extrabold mt-1 text-amber-500">0,00 L</p>
+          <p class="text-[11px] text-slate-400 mt-0.5">Media: <span id="kpi-avg-price">1,699</span> €/L</p>
+        </div>
+        <div class="rounded-2xl bg-white dark:bg-corsa-card border border-slate-200 dark:border-corsa-border p-4">
+          <p class="text-xs font-medium text-slate-500 dark:text-slate-400">Coste Diésel / Día</p>
+          <p id="kpi-daily-cost-ref" class="text-2xl font-extrabold mt-1 text-cyan-500">5,11 €</p>
+          <p class="text-[11px] text-slate-400 mt-0.5">Para <span id="kpi-ref-km">64</span> km (Ida+Vuelta)</p>
+        </div>
+        <div class="rounded-2xl bg-white dark:bg-corsa-card border border-slate-200 dark:border-corsa-border p-4">
+          <p class="text-xs font-medium text-slate-500 dark:text-slate-400">Consumo Real Medido</p>
+          <p id="kpi-real-consumption" class="text-2xl font-extrabold mt-1">4,7 <span class="text-sm font-semibold">L/100</span></p>
+          <p id="kpi-real-consumption-sub" class="text-[11px] text-slate-400 mt-0.5">Estimado Corsa CDTI</p>
+        </div>
+      </div>
+
+      <!-- Barra de Punto de Equilibrio Semanal (Meta 14 trayectos = 21 €) -->
+      <div class="rounded-2xl bg-white dark:bg-corsa-card border border-slate-200 dark:border-corsa-border p-4 sm:p-5">
+        <div class="flex flex-wrap items-center justify-between gap-2 mb-2">
+          <div class="flex items-center gap-2">
+            <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
+            <h3 class="text-sm font-bold">Punto de Equilibrio — Semana Actual</h3>
+          </div>
+          <span id="weekly-progress-text" class="text-xs font-bold text-cyan-500">0 / 14 trayectos (0,00 € / 21,00 €)</span>
+        </div>
+        <div class="w-full h-3.5 bg-slate-200 dark:bg-slate-800 rounded-full overflow-hidden p-0.5">
+          <div id="weekly-progress-bar" class="h-full rounded-full bg-gradient-to-r from-amber-500 via-cyan-500 to-emerald-500 transition-all duration-500" style="width: 0%"></div>
+        </div>
+        <div class="flex justify-between items-center mt-2 text-[11px] text-slate-500 dark:text-slate-400">
+          <span id="weekly-status-hint">Faltan 14 trayectos esta semana para viajar 100% gratis.</span>
+          <span>Meta: <strong id="weekly-goal-euros">21,00 €</strong></span>
+        </div>
+      </div>
+    </section>
+
+    <!-- 2. FORMULARIOS DE REGISTRO RÁPIDO (DOS COLUMNAS EN DESKTOP, TABS EN MÓVIL) -->
+    <section aria-label="Registro Rápido">
+      <!-- Selector de Pestañas solo en Móvil -->
+      <div class="grid grid-cols-2 gap-2 p-1 rounded-2xl bg-slate-200/80 dark:bg-slate-900 border border-slate-300/60 dark:border-corsa-border md:hidden mb-4">
+        <button id="mobile-tab-trip" onclick="switchMobileForm('trip')" class="py-2.5 rounded-xl text-sm font-bold bg-white dark:bg-corsa-card text-cyan-600 dark:text-cyan-400 shadow-sm transition">
+          🚗 Registrar Viaje
+        </button>
+        <button id="mobile-tab-fuel" onclick="switchMobileForm('fuel')" class="py-2.5 rounded-xl text-sm font-bold text-slate-600 dark:text-slate-400 transition">
+          ⛽ Echar Diésel
+        </button>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-12 gap-5">
+        
+        <!-- FORMULARIO A: REGISTRO DE JORNADA (VIAJE A LA UNI) -->
+        <div id="panel-form-trip" class="md:col-span-7 rounded-2xl bg-white dark:bg-corsa-card border border-slate-200 dark:border-corsa-border p-5 shadow-sm">
+          <div class="flex items-center justify-between mb-4">
+            <div class="flex items-center gap-2.5">
+              <span class="p-2 rounded-xl bg-cyan-500/15 text-cyan-500">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"/></svg>
+              </span>
+              <div>
+                <h2 id="trip-form-title" class="text-base font-bold">Registrar Viaje a la Uni</h2>
+                <p class="text-xs text-slate-500 dark:text-slate-400">Santa Pola ↔ UA · 1,50 €/plaza</p>
+              </div>
+            </div>
+            <!-- Botón cancelar edición si aplica -->
+            <button id="cancel-edit-trip" onclick="resetTripForm()" class="hidden text-xs font-semibold text-rose-500 hover:underline">Cancelar edición</button>
+          </div>
+
+          <form id="trip-form" class="space-y-4">
+            <input type="hidden" id="trip-edit-id" value="" />
+
+            <!-- Fecha + Presets Rápidos -->
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label class="block text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">Fecha del viaje</label>
+                <input type="date" id="trip-date" required class="w-full px-3.5 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 focus:border-cyan-500 focus:outline-none font-medium" />
+              </div>
+              <div>
+                <label class="block text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">Atajos Rápidos</label>
+                <div class="grid grid-cols-3 gap-1.5">
+                  <button type="button" onclick="applyTripPreset(1, 1, 'Chica fija jueves (ida+vuelta)')" class="px-2 py-2.5 rounded-xl text-xs font-bold bg-purple-500/15 text-purple-600 dark:text-purple-400 hover:bg-purple-500/25 border border-purple-500/20 transition text-center leading-tight">
+                    Fija Jue<br><span class="text-[10px] opacity-80">1+1 (3€)</span>
+                  </button>
+                  <button type="button" onclick="applyTripPreset(1, 2, '3 trayectos habituales')" class="px-2 py-2.5 rounded-xl text-xs font-bold bg-cyan-500/15 text-cyan-600 dark:text-cyan-400 hover:bg-cyan-500/25 border border-cyan-500/20 transition text-center leading-tight">
+                    Habitual<br><span class="text-[10px] opacity-80">3 pl. (4,5€)</span>
+                  </button>
+                  <button type="button" onclick="applyTripPreset(2, 2, '4 trayectos - día cubierto')" class="px-2 py-2.5 rounded-xl text-xs font-bold bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/25 border border-emerald-500/20 transition text-center leading-tight">
+                    Cubierto<br><span class="text-[10px] opacity-80">4 pl. (6€)</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Selectores Táctiles de Pasajeros Ida y Vuelta -->
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
+              <!-- Pasajeros IDA -->
+              <div class="p-3 rounded-xl bg-slate-50 dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800">
+                <div class="flex justify-between items-center mb-2">
+                  <span class="text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300">↗️ Ida (a la UA)</span>
+                  <span id="ida-money-label" class="text-xs font-bold text-emerald-500">0,00 €</span>
+                </div>
+                <div class="grid grid-cols-5 gap-1.5" id="ida-buttons">
+                  <button type="button" data-val="0" onclick="setPassengers('ida', 0)" class="pax-btn-ida py-2.5 rounded-lg font-extrabold text-sm transition">0</button>
+                  <button type="button" data-val="1" onclick="setPassengers('ida', 1)" class="pax-btn-ida py-2.5 rounded-lg font-extrabold text-sm transition">1</button>
+                  <button type="button" data-val="2" onclick="setPassengers('ida', 2)" class="pax-btn-ida py-2.5 rounded-lg font-extrabold text-sm transition">2</button>
+                  <button type="button" data-val="3" onclick="setPassengers('ida', 3)" class="pax-btn-ida py-2.5 rounded-lg font-extrabold text-sm transition">3</button>
+                  <button type="button" data-val="4" onclick="setPassengers('ida', 4)" class="pax-btn-ida py-2.5 rounded-lg font-extrabold text-sm transition">4</button>
+                </div>
+              </div>
+
+              <!-- Pasajeros VUELTA -->
+              <div class="p-3 rounded-xl bg-slate-50 dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800">
+                <div class="flex justify-between items-center mb-2">
+                  <span class="text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300">↙️ Vuelta (a Sta. Pola)</span>
+                  <span id="vuelta-money-label" class="text-xs font-bold text-emerald-500">0,00 €</span>
+                </div>
+                <div class="grid grid-cols-5 gap-1.5" id="vuelta-buttons">
+                  <button type="button" data-val="0" onclick="setPassengers('vuelta', 0)" class="pax-btn-vuelta py-2.5 rounded-lg font-extrabold text-sm transition">0</button>
+                  <button type="button" data-val="1" onclick="setPassengers('vuelta', 1)" class="pax-btn-vuelta py-2.5 rounded-lg font-extrabold text-sm transition">1</button>
+                  <button type="button" data-val="2" onclick="setPassengers('vuelta', 2)" class="pax-btn-vuelta py-2.5 rounded-lg font-extrabold text-sm transition">2</button>
+                  <button type="button" data-val="3" onclick="setPassengers('vuelta', 3)" class="pax-btn-vuelta py-2.5 rounded-lg font-extrabold text-sm transition">3</button>
+                  <button type="button" data-val="4" onclick="setPassengers('vuelta', 4)" class="pax-btn-vuelta py-2.5 rounded-lg font-extrabold text-sm transition">4</button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Distancia del Trayecto -->
+            <div class="grid grid-cols-1 sm:grid-cols-12 gap-3 items-end">
+              <div class="sm:col-span-8">
+                <label class="block text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">Tipo de recorrido</label>
+                <div class="grid grid-cols-3 gap-1.5">
+                  <button type="button" id="dist-btn-round" onclick="setTripDistanceMode('round')" class="py-2.5 px-2 rounded-xl text-xs font-bold border transition">
+                    Ida+Vuelta (64km)
+                  </button>
+                  <button type="button" id="dist-btn-oneway" onclick="setTripDistanceMode('oneway')" class="py-2.5 px-2 rounded-xl text-xs font-bold border transition">
+                    Solo 1 (32km)
+                  </button>
+                  <button type="button" id="dist-btn-custom" onclick="setTripDistanceMode('custom')" class="py-2.5 px-2 rounded-xl text-xs font-bold border transition">
+                    Otro / Desvío
+                  </button>
+                </div>
+              </div>
+              <div class="sm:col-span-4">
+                <label class="block text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">Km totales</label>
+                <input type="number" step="0.5" id="trip-km" value="64" required oninput="updateTripLivePreview()" class="w-full px-3.5 py-2 rounded-xl bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 focus:border-cyan-500 focus:outline-none font-bold text-center" />
+              </div>
+            </div>
+
+            <!-- Notas y Checkbox Bizum -->
+            <div class="grid grid-cols-1 sm:grid-cols-12 gap-3 items-center">
+              <div class="sm:col-span-7">
+                <input type="text" id="trip-notes" placeholder="Nota opcional (ej. Chica fija jueves + 2 sueltos)" class="w-full px-3.5 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 focus:border-cyan-500 focus:outline-none text-sm" />
+              </div>
+              <div class="sm:col-span-5">
+                <label class="flex items-center gap-2.5 p-2.5 rounded-xl bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 cursor-pointer select-none">
+                  <input type="checkbox" id="trip-paid" checked class="w-5 h-5 rounded accent-emerald-500 cursor-pointer" />
+                  <span class="text-xs font-bold">Cobrado / Bizum OK</span>
+                </label>
+              </div>
+            </div>
+
+            <!-- Previsualización Instantánea antes de Guardar -->
+            <div class="p-3.5 rounded-xl bg-slate-900 dark:bg-slate-950 border border-slate-800 text-white flex items-center justify-between gap-2">
+              <div class="text-xs space-y-0.5">
+                <div class="text-slate-400">Ingresos: <strong id="preview-trip-income" class="text-emerald-400">0,00 €</strong> · Diésel est.: <strong id="preview-trip-cost" class="text-rose-400">-5,11 €</strong></div>
+                <div class="text-[11px] text-slate-500">Consumo est.: <span id="preview-trip-liters">3,01</span> L a <span id="preview-trip-price">1,699</span> €/L</div>
+              </div>
+              <div class="text-right">
+                <span class="block text-[10px] uppercase tracking-wider text-slate-400">Neto Jornada</span>
+                <span id="preview-trip-net" class="text-lg font-extrabold text-rose-400">-5,11 €</span>
+              </div>
+            </div>
+
+            <button type="submit" id="trip-submit-btn" class="w-full py-3.5 rounded-xl bg-gradient-to-r from-cyan-600 to-emerald-600 hover:from-cyan-500 hover:to-emerald-500 text-white font-bold text-sm shadow-lg shadow-cyan-600/20 transition active:scale-[0.99]">
+              Guardar Jornada
+            </button>
+          </form>
+        </div>
+
+        <!-- FORMULARIO B: REGISTRO DE REPOSTAJE (GASOLINERA) -->
+        <div id="panel-form-fuel" class="hidden md:block md:col-span-5 rounded-2xl bg-white dark:bg-corsa-card border border-slate-200 dark:border-corsa-border p-5 shadow-sm flex flex-col justify-between">
+          <div>
+            <div class="flex items-center justify-between mb-4">
+              <div class="flex items-center gap-2.5">
+                <span class="p-2 rounded-xl bg-amber-500/15 text-amber-500">
+                  <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg>
+                </span>
+                <div>
+                  <h2 id="fuel-form-title" class="text-base font-bold">Registrar Repostaje</h2>
+                  <p class="text-xs text-slate-500 dark:text-slate-400">Actualiza tu precio €/L al instante</p>
+                </div>
+              </div>
+              <button id="cancel-edit-fuel" onclick="resetFuelForm()" class="hidden text-xs font-semibold text-rose-500 hover:underline">Cancelar</button>
+            </div>
+
+            <form id="fuel-form" class="space-y-4">
+              <input type="hidden" id="fuel-edit-id" value="" />
+
+              <div>
+                <label class="block text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">Fecha de repostaje</label>
+                <input type="date" id="fuel-date" required class="w-full px-3.5 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 focus:border-amber-500 focus:outline-none font-medium" />
+              </div>
+
+              <!-- Importe rápido + Precio por litro -->
+              <div class="grid grid-cols-2 gap-3">
+                <div>
+                  <div class="flex justify-between items-center mb-1.5">
+                    <label class="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Importe (€)</label>
+                    <div class="flex gap-1">
+                      <button type="button" onclick="setQuickFuelAmount(15)" class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-500 hover:bg-amber-500/25">15€</button>
+                      <button type="button" onclick="setQuickFuelAmount(20)" class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-500 hover:bg-amber-500/25">20€</button>
+                    </div>
+                  </div>
+                  <input type="number" step="0.01" id="fuel-amount" value="15.00" required oninput="calculateFuelFromAmount()" class="w-full px-3.5 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 focus:border-amber-500 focus:outline-none font-bold text-amber-500" />
+                </div>
+
+                <div>
+                  <label class="block text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">Precio Diésel (€/L)</label>
+                  <input type="number" step="0.001" id="fuel-price" value="1.699" required oninput="calculateFuelFromAmount()" class="w-full px-3.5 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 focus:border-amber-500 focus:outline-none font-bold" />
+                </div>
+              </div>
+
+              <!-- Litros calculados + Odómetro opcional -->
+              <div class="grid grid-cols-2 gap-3">
+                <div>
+                  <label class="block text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">Litros (auto)</label>
+                  <input type="number" step="0.01" id="fuel-liters" value="8.83" required oninput="calculateFuelFromLiters()" class="w-full px-3.5 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 focus:border-amber-500 focus:outline-none font-bold" />
+                </div>
+                <div>
+                  <label class="block text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">Km Coche (Opcional)</label>
+                  <input type="number" step="1" id="fuel-odometer" placeholder="Ej. 184520" class="w-full px-3.5 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 focus:border-amber-500 focus:outline-none text-sm" />
+                </div>
+              </div>
+
+              <div>
+                <input type="text" id="fuel-notes" placeholder="Gasolinera (ej. Plenoil Santa Pola, Ballenoil...)" class="w-full px-3.5 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 focus:border-amber-500 focus:outline-none text-sm" />
+              </div>
+
+              <!-- Resumen autonomía estimada de esos litros -->
+              <div class="p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-xs flex items-center justify-between">
+                <span class="text-slate-600 dark:text-slate-300">Autonomía estimada (Corsa):</span>
+                <strong id="fuel-est-range" class="text-amber-500 font-bold">~188 km (2,9 días)</strong>
+              </div>
+
+              <button type="submit" id="fuel-submit-btn" class="w-full py-3.5 rounded-xl bg-amber-600 hover:bg-amber-500 text-white font-bold text-sm shadow-lg shadow-amber-600/20 transition active:scale-[0.99]">
+                Guardar Repostaje
+              </button>
+            </form>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- 3. GRÁFICA COMPARATIVA (INGRESOS VS GASTO EN DIÉSEL) -->
+    <section aria-label="Gráfica Comparativa" class="rounded-2xl bg-white dark:bg-corsa-card border border-slate-200 dark:border-corsa-border p-5 shadow-sm">
+      <div class="flex flex-wrap items-center justify-between gap-2 mb-4">
+        <div>
+          <h3 class="text-base font-bold">Ingresos vs. Gasto en Diésel</h3>
+          <p class="text-xs text-slate-500 dark:text-slate-400">Comparativa semanal de lo cobrado a pasajeros frente al coste estimado de ruta y repostajes</p>
+        </div>
+        <div class="flex items-center gap-3 text-xs">
+          <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-sm bg-emerald-500"></span>Ingresos</span>
+          <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-sm bg-cyan-500"></span>Diésel Ruta</span>
+          <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-sm bg-amber-500"></span>Surtidor</span>
+        </div>
+      </div>
+      <div class="relative h-56 sm:h-64 w-full">
+        <canvas id="finance-chart"></canvas>
+      </div>
+    </section>
+
+    <!-- 4. HISTORIAL, FILTROS Y EXPORTACIÓN / BACKUP -->
+    <section aria-label="Historial y Backup" class="rounded-2xl bg-white dark:bg-corsa-card border border-slate-200 dark:border-corsa-border p-5 shadow-sm space-y-4">
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div>
+          <h3 class="text-base font-bold">Historial de Movimientos</h3>
+          <p class="text-xs text-slate-500 dark:text-slate-400">Pulsa en un Bizum pendiente para marcarlo como cobrado</p>
+        </div>
+
+        <!-- Botones Exportar / Importar -->
+        <div class="flex flex-wrap items-center gap-2">
+          <button onclick="exportCSV()" class="px-3 py-2 rounded-xl text-xs font-semibold bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 transition flex items-center gap-1.5">
+            <svg class="w-4 h-4 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a
