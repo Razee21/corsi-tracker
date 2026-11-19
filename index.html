@@ -1,519 +1,1453 @@
 <!DOCTYPE html>
-<html lang="es" class="dark">
+<html lang="es">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="theme-color" content="#0f172a" />
   <title>CorsaTracker UA — Control de Viajes y Diésel</title>
-  <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
-  <!-- Google Fonts: Inter -->
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <!-- Chart.js para la gráfica comparativa -->
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <script>
-    tailwind.config = {
-      darkMode: 'class',
-      theme: {
-        extend: {
-          fontFamily: {
-            sans: ['Inter', 'system-ui', 'sans-serif'],
-          },
-          colors: {
-            corsa: {
-              dark: '#0b0f19',
-              card: '#131a2a',
-              border: '#1f293d',
-              accent: '#06b6d4',
-            }
-          }
-        }
-      }
-    }
-  </script>
   <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
     body {
-      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background-color: #0f172a;
+      color: #f8fafc;
       -webkit-tap-highlight-color: transparent;
+      overscroll-behavior-y: contain;
     }
-    /* Custom scrollbar suave */
-    ::-webkit-scrollbar {
-      width: 6px;
-      height: 6px;
+    input[type="number"]::-webkit-inner-spin-button,
+    input[type="number"]::-webkit-outer-spin-button {
+      -webkit-appearance: none;
+      margin: 0;
     }
-    ::-webkit-scrollbar-track {
-      background: transparent;
+    input[type="number"] {
+      -moz-appearance: textfield;
     }
-    ::-webkit-scrollbar-thumb {
-      background: rgba(148, 163, 184, 0.3);
-      border-radius: 9999px;
+    .tap-btn {
+      min-height: 46px;
+      touch-action: manipulation;
+      user-select: none;
+      transition: transform 0.08s ease, background-color 0.15s ease, border-color 0.15s ease;
     }
-    /* Evitar zoom en inputs iOS */
-    input, select, textarea {
-      font-size: 16px !important;
-    }
-    @media (min-width: 768px) {
-      input, select, textarea {
-        font-size: 14px !important;
-      }
+    .tap-btn:active {
+      transform: scale(0.96);
     }
   </style>
 </head>
-<body class="bg-slate-100 text-slate-900 dark:bg-corsa-dark dark:text-slate-100 min-h-screen transition-colors duration-200 pb-24 md:pb-12">
+<body class="min-h-screen pb-24 selection:bg-emerald-500 selection:text-white">
 
-  <!-- Toast / Notificación flotante (reemplazo seguro de alert/confirm) -->
-  <div id="toast-container" class="fixed top-4 right-4 left-4 md:left-auto md:w-96 z-50 flex flex-col gap-2 pointer-events-none"></div>
+  <!-- Toast de Notificación + Deshacer -->
+  <div id="toast-container" class="fixed bottom-20 left-1/2 -translate-x-1/2 z-50 w-[92%] max-w-md pointer-events-none flex flex-col gap-2"></div>
 
-  <!-- Modal de Confirmación Personalizado -->
-  <div id="confirm-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/70 backdrop-blur-sm p-4">
-    <div class="bg-white dark:bg-corsa-card border border-slate-200 dark:border-corsa-border rounded-2xl max-w-sm w-full p-6 shadow-2xl transform transition-all">
-      <div class="flex items-center gap-3 mb-3">
-        <div class="w-10 h-10 rounded-full bg-rose-500/15 text-rose-500 flex items-center justify-center shrink-0">
-          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
-        </div>
-        <h3 id="confirm-title" class="text-lg font-bold">¿Confirmar acción?</h3>
-      </div>
-      <p id="confirm-message" class="text-sm text-slate-600 dark:text-slate-400 mb-6">Esta acción no se puede deshacer.</p>
-      <div class="flex gap-3 justify-end">
-        <button id="confirm-cancel" class="px-4 py-2.5 rounded-xl text-sm font-medium bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 transition">Cancelar</button>
-        <button id="confirm-ok" class="px-4 py-2.5 rounded-xl text-sm font-semibold bg-rose-600 hover:bg-rose-500 text-white transition">Eliminar</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- Modal de Ajustes del Vehículo y Ruta -->
-  <div id="settings-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/70 backdrop-blur-sm p-4 overflow-y-auto">
-    <div class="bg-white dark:bg-corsa-card border border-slate-200 dark:border-corsa-border rounded-2xl max-w-md w-full p-6 shadow-2xl my-auto">
-      <div class="flex items-center justify-between mb-5">
-        <div class="flex items-center gap-2.5">
-          <span class="p-2 rounded-xl bg-cyan-500/15 text-cyan-500">
-            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
-          </span>
-          <div>
-            <h3 class="text-lg font-bold">Ajustes del Corsa y Ruta</h3>
-            <p class="text-xs text-slate-500 dark:text-slate-400">Opel Corsa D 1.3 CDTI (2007)</p>
-          </div>
-        </div>
-        <button onclick="closeSettingsModal()" class="p-2 rounded-xl text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800">
-          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
-        </button>
-      </div>
-
-      <form id="settings-form" class="space-y-4">
-        <div class="grid grid-cols-2 gap-3">
-          <div>
-            <label class="block text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">Km Ida + Vuelta</label>
-            <input type="number" step="0.1" id="cfg-km-round" required class="w-full px-3.5 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 focus:border-cyan-500 focus:outline-none font-semibold" />
-          </div>
-          <div>
-            <label class="block text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">Consumo (L/100km)</label>
-            <input type="number" step="0.1" id="cfg-consumption" required class="w-full px-3.5 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 focus:border-cyan-500 focus:outline-none font-semibold" />
-          </div>
-        </div>
-
-        <div class="grid grid-cols-2 gap-3">
-          <div>
-            <label class="block text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">Tarifa Pasajero (€)</label>
-            <input type="number" step="0.05" id="cfg-fare" required class="w-full px-3.5 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 focus:border-cyan-500 focus:outline-none font-semibold" />
-          </div>
-          <div>
-            <label class="block text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">Precio Diésel (€/L)</label>
-            <input type="number" step="0.001" id="cfg-diesel-price" required class="w-full px-3.5 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 focus:border-cyan-500 focus:outline-none font-semibold" />
-          </div>
-        </div>
-
-        <div>
-          <label class="block text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">Meta Semanal de Trayectos</label>
-          <input type="number" step="1" id="cfg-weekly-goal" required class="w-full px-3.5 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 focus:border-cyan-500 focus:outline-none font-semibold" />
-          <p class="text-xs text-slate-500 mt-1">Con 64 km × 4 días a ~1,70 €/L, 14 trayectos (21 €) cubren el 100% del diésel.</p>
-        </div>
-
-        <div class="pt-3 border-t border-slate-200 dark:border-slate-800 flex flex-col gap-2">
-          <button type="submit" class="w-full py-3 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white font-semibold transition shadow-lg shadow-cyan-600/20">
-            Guardar Configuración
-          </button>
-          <button type="button" onclick="loadDemoDataPrompt()" class="w-full py-2.5 rounded-xl bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-300 transition">
-            Cargar semana de ejemplo (para probar)
-          </button>
-        </div>
-      </form>
-    </div>
-  </div>
-
-  <!-- Barra Superior (Header) -->
-  <header class="sticky top-0 z-30 bg-white/85 dark:bg-corsa-dark/85 backdrop-blur-md border-b border-slate-200 dark:border-corsa-border">
-    <div class="max-w-5xl mx-auto px-4 h-16 flex items-center justify-between">
-      <div class="flex items-center gap-3">
-        <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-cyan-500 to-emerald-500 flex items-center justify-center text-white font-extrabold shadow-lg shadow-cyan-500/20">
-          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+  <!-- Header -->
+  <header class="sticky top-0 z-30 bg-slate-900/95 backdrop-blur-md border-b border-slate-800 px-4 py-3">
+    <div class="max-w-2xl mx-auto flex items-center justify-between gap-2">
+      <div class="flex items-center gap-2.5">
+        <div class="w-10 h-10 rounded-xl bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shrink-0">
+          <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M8 17h.01M16 17h.01M5 11l1.5-4.5A2 2 0 018.4 5h7.2a2 2 0 011.9 1.5L19 11m-14 0h14m-14 0v5a1 1 0 001 1h1a1 1 0 001-1v-1h8v1a1 1 0 001 1h1a1 1 0 001-1v-5"/>
+          </svg>
         </div>
         <div>
           <div class="flex items-center gap-2">
-            <h1 class="font-extrabold text-base sm:text-lg tracking-tight leading-none">CorsaTracker <span class="text-cyan-500">UA</span></h1>
-            <span class="hidden sm:inline-block text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400">1.3 CDTI '07</span>
+            <h1 class="font-extrabold text-base sm:text-lg tracking-tight text-white">CorsaTracker UA</h1>
+            <span class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 border border-slate-700">1.3 CDTI</span>
           </div>
-          <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Santa Pola ↔ Univ. Alicante · <span id="header-ref-price" class="font-semibold text-amber-500">1,699 €/L</span></p>
+          <p class="text-xs text-slate-400">Santa Pola ↔ Univ. Alicante (64 km)</p>
         </div>
       </div>
 
-      <div class="flex items-center gap-2">
-        <!-- Toggle Tema Claro/Oscuro -->
-        <button id="theme-toggle" title="Cambiar tema" class="p-2.5 rounded-xl bg-slate-200/70 dark:bg-slate-800/80 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 transition">
-          <svg id="icon-sun" class="w-5 h-5 hidden dark:block text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
-          <svg id="icon-moon" class="w-5 h-5 block dark:hidden text-slate-700" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/></svg>
-        </button>
-        <!-- Botón Ajustes -->
-        <button onclick="openSettingsModal()" title="Ajustes" class="p-2.5 rounded-xl bg-slate-200/70 dark:bg-slate-800/80 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 transition flex items-center gap-1.5">
-          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
-          <span class="hidden sm:inline text-xs font-semibold">Ajustes</span>
-        </button>
-      </div>
+      <button type="button" id="btn-storage-status" class="tap-btn px-3 py-1.5 rounded-xl bg-slate-800/90 border border-slate-700 text-xs font-medium text-slate-300 flex items-center gap-1.5 hover:border-slate-600">
+        <span id="storage-dot" class="w-2 h-2 rounded-full bg-emerald-400"></span>
+        <span id="storage-label">Local DB</span>
+      </button>
     </div>
   </header>
 
-  <!-- Contenido Principal -->
-  <main class="max-w-5xl mx-auto px-4 pt-5 space-y-6">
+  <main class="max-w-2xl mx-auto px-4 pt-4 space-y-4">
 
-    <!-- 1. PANEL RESUMEN (DASHBOARD SUPERIOR) -->
-    <section aria-label="Resumen Financiero" class="space-y-4">
-      <!-- Tarjetas Principales de Balance -->
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <!-- Balance Real de Caja (Ingresos vs Repostajes Pagados) -->
-        <div class="relative overflow-hidden rounded-2xl bg-white dark:bg-corsa-card border border-slate-200 dark:border-corsa-border p-5 shadow-sm">
-          <div class="flex items-start justify-between">
-            <div>
-              <span class="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Balance Real (Caja vs Surtidor)</span>
-              <div class="flex items-baseline gap-2.5 mt-1">
-                <h2 id="kpi-net-real" class="text-3xl sm:text-4xl font-extrabold tracking-tight">0,00 €</h2>
-                <span id="kpi-net-real-badge" class="text-xs font-bold px-2.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-500">Equilibrado</span>
-              </div>
-              <p class="text-xs text-slate-500 dark:text-slate-400 mt-1.5">
-                Ingresado: <strong id="kpi-total-income" class="text-emerald-500">0,00 €</strong> · Repostado: <strong id="kpi-total-fuel-spent" class="text-amber-500">0,00 €</strong>
-              </p>
-            </div>
-            <div class="p-3 rounded-2xl bg-emerald-500/10 text-emerald-500">
-              <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-            </div>
-          </div>
-          <!-- Sub-detalle del Mes Actual -->
-          <div class="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between text-xs">
-            <span class="text-slate-500 dark:text-slate-400">Balance Mes Actual (<span id="current-month-name" class="capitalize font-medium"></span>):</span>
-            <span id="kpi-month-net" class="font-bold text-sm">0,00 €</span>
-          </div>
+    <!-- Dashboard KPIs -->
+    <section class="grid grid-cols-2 gap-3">
+      <!-- Balance de Caja Real -->
+      <div class="bg-slate-800/80 border border-slate-700/80 rounded-2xl p-3.5 sm:p-4 flex flex-col justify-between">
+        <div class="flex items-center justify-between gap-1">
+          <span class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Caja Real</span>
+          <span id="badge-bizum-pending" class="hidden text-[11px] font-bold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30">
+            0,00 € pend.
+          </span>
         </div>
-
-        <!-- Balance Operativo por Km (Ingresos vs Diésel Consumido Estimado) -->
-        <div class="relative overflow-hidden rounded-2xl bg-white dark:bg-corsa-card border border-slate-200 dark:border-corsa-border p-5 shadow-sm">
-          <div class="flex items-start justify-between">
-            <div>
-              <span class="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Rentabilidad Real por Trayectos</span>
-              <div class="flex items-baseline gap-2.5 mt-1">
-                <h2 id="kpi-net-operational" class="text-3xl sm:text-4xl font-extrabold tracking-tight">0,00 €</h2>
-                <span id="kpi-op-badge" class="text-xs font-bold px-2.5 py-0.5 rounded-full bg-cyan-500/15 text-cyan-500">0,00 €/km</span>
-              </div>
-              <p class="text-xs text-slate-500 dark:text-slate-400 mt-1.5">
-                Diésel consumido en ruta: <strong id="kpi-est-fuel-cost" class="text-rose-400">0,00 €</strong> (<span id="kpi-total-km">0</span> km)
-              </p>
-            </div>
-            <div class="p-3 rounded-2xl bg-cyan-500/10 text-cyan-500">
-              <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
-            </div>
-          </div>
-          <!-- Pendientes de Bizum -->
-          <div class="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between text-xs">
-            <span class="text-slate-500 dark:text-slate-400">Pendiente de cobrar (Bizum):</span>
-            <span id="kpi-pending-bizum" class="font-bold text-amber-500">0,00 €</span>
-          </div>
+        <div class="mt-2">
+          <div id="kpi-cash-balance" class="text-2xl sm:text-3xl font-extrabold tracking-tight text-white">0,00 €</div>
+          <p id="kpi-cash-sub" class="text-[11px] text-slate-400 mt-1">Cobrado: 0,00 € · Diésel: 0,00 €</p>
         </div>
       </div>
 
-      <!-- KPIs Secundarios (4 columnas en desktop, 2x2 en móvil) -->
-      <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <div class="rounded-2xl bg-white dark:bg-corsa-card border border-slate-200 dark:border-corsa-border p-4">
-          <p class="text-xs font-medium text-slate-500 dark:text-slate-400">Plazas Llevadas</p>
-          <p id="kpi-total-seats" class="text-2xl font-extrabold mt-1">0</p>
-          <p class="text-[11px] text-slate-400 mt-0.5"><span id="kpi-avg-seats">0,0</span> plazas/día de media</p>
+      <!-- Rentabilidad Ruta Mes Actual -->
+      <div class="bg-slate-800/80 border border-slate-700/80 rounded-2xl p-3.5 sm:p-4 flex flex-col justify-between">
+        <div class="flex items-center justify-between gap-1">
+          <span class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Ruta Este Mes</span>
+          <span id="kpi-consumption-badge" class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-slate-700 text-slate-300">
+            4,7 L/100
+          </span>
         </div>
-        <div class="rounded-2xl bg-white dark:bg-corsa-card border border-slate-200 dark:border-corsa-border p-4">
-          <p class="text-xs font-medium text-slate-500 dark:text-slate-400">Litros Repostados</p>
-          <p id="kpi-total-liters" class="text-2xl font-extrabold mt-1 text-amber-500">0,00 L</p>
-          <p class="text-[11px] text-slate-400 mt-0.5">Media: <span id="kpi-avg-price">1,699</span> €/L</p>
-        </div>
-        <div class="rounded-2xl bg-white dark:bg-corsa-card border border-slate-200 dark:border-corsa-border p-4">
-          <p class="text-xs font-medium text-slate-500 dark:text-slate-400">Coste Diésel / Día</p>
-          <p id="kpi-daily-cost-ref" class="text-2xl font-extrabold mt-1 text-cyan-500">5,11 €</p>
-          <p class="text-[11px] text-slate-400 mt-0.5">Para <span id="kpi-ref-km">64</span> km (Ida+Vuelta)</p>
-        </div>
-        <div class="rounded-2xl bg-white dark:bg-corsa-card border border-slate-200 dark:border-corsa-border p-4">
-          <p class="text-xs font-medium text-slate-500 dark:text-slate-400">Consumo Real Medido</p>
-          <p id="kpi-real-consumption" class="text-2xl font-extrabold mt-1">4,7 <span class="text-sm font-semibold">L/100</span></p>
-          <p id="kpi-real-consumption-sub" class="text-[11px] text-slate-400 mt-0.5">Estimado Corsa CDTI</p>
+        <div class="mt-2">
+          <div id="kpi-month-net" class="text-2xl sm:text-3xl font-extrabold tracking-tight text-emerald-400">+0,00 €</div>
+          <p id="kpi-month-sub" class="text-[11px] text-slate-400 mt-1">Ingresos vs Diésel consumido</p>
         </div>
       </div>
 
-      <!-- Barra de Punto de Equilibrio Semanal (Meta 14 trayectos = 21 €) -->
-      <div class="rounded-2xl bg-white dark:bg-corsa-card border border-slate-200 dark:border-corsa-border p-4 sm:p-5">
+      <!-- Meta Semanal (14 trayectos = 21 €) -->
+      <div class="col-span-2 bg-slate-800/80 border border-slate-700/80 rounded-2xl p-3.5 sm:p-4">
         <div class="flex flex-wrap items-center justify-between gap-2 mb-2">
-          <div class="flex items-center gap-2">
-            <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
-            <h3 class="text-sm font-bold">Punto de Equilibrio — Semana Actual</h3>
-          </div>
-          <span id="weekly-progress-text" class="text-xs font-bold text-cyan-500">0 / 14 trayectos (0,00 € / 21,00 €)</span>
-        </div>
-        <div class="w-full h-3.5 bg-slate-200 dark:bg-slate-800 rounded-full overflow-hidden p-0.5">
-          <div id="weekly-progress-bar" class="h-full rounded-full bg-gradient-to-r from-amber-500 via-cyan-500 to-emerald-500 transition-all duration-500" style="width: 0%"></div>
-        </div>
-        <div class="flex justify-between items-center mt-2 text-[11px] text-slate-500 dark:text-slate-400">
-          <span id="weekly-status-hint">Faltan 14 trayectos esta semana para viajar 100% gratis.</span>
-          <span>Meta: <strong id="weekly-goal-euros">21,00 €</strong></span>
-        </div>
-      </div>
-    </section>
-
-    <!-- 2. FORMULARIOS DE REGISTRO RÁPIDO (DOS COLUMNAS EN DESKTOP, TABS EN MÓVIL) -->
-    <section aria-label="Registro Rápido">
-      <!-- Selector de Pestañas solo en Móvil -->
-      <div class="grid grid-cols-2 gap-2 p-1 rounded-2xl bg-slate-200/80 dark:bg-slate-900 border border-slate-300/60 dark:border-corsa-border md:hidden mb-4">
-        <button id="mobile-tab-trip" onclick="switchMobileForm('trip')" class="py-2.5 rounded-xl text-sm font-bold bg-white dark:bg-corsa-card text-cyan-600 dark:text-cyan-400 shadow-sm transition">
-          🚗 Registrar Viaje
-        </button>
-        <button id="mobile-tab-fuel" onclick="switchMobileForm('fuel')" class="py-2.5 rounded-xl text-sm font-bold text-slate-600 dark:text-slate-400 transition">
-          ⛽ Echar Diésel
-        </button>
-      </div>
-
-      <div class="grid grid-cols-1 md:grid-cols-12 gap-5">
-        
-        <!-- FORMULARIO A: REGISTRO DE JORNADA (VIAJE A LA UNI) -->
-        <div id="panel-form-trip" class="md:col-span-7 rounded-2xl bg-white dark:bg-corsa-card border border-slate-200 dark:border-corsa-border p-5 shadow-sm">
-          <div class="flex items-center justify-between mb-4">
-            <div class="flex items-center gap-2.5">
-              <span class="p-2 rounded-xl bg-cyan-500/15 text-cyan-500">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"/></svg>
-              </span>
-              <div>
-                <h2 id="trip-form-title" class="text-base font-bold">Registrar Viaje a la Uni</h2>
-                <p class="text-xs text-slate-500 dark:text-slate-400">Santa Pola ↔ UA · 1,50 €/plaza</p>
-              </div>
-            </div>
-            <!-- Botón cancelar edición si aplica -->
-            <button id="cancel-edit-trip" onclick="resetTripForm()" class="hidden text-xs font-semibold text-rose-500 hover:underline">Cancelar edición</button>
-          </div>
-
-          <form id="trip-form" class="space-y-4">
-            <input type="hidden" id="trip-edit-id" value="" />
-
-            <!-- Fecha + Presets Rápidos -->
-            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
-                <label class="block text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">Fecha del viaje</label>
-                <input type="date" id="trip-date" required class="w-full px-3.5 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 focus:border-cyan-500 focus:outline-none font-medium" />
-              </div>
-              <div>
-                <label class="block text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">Atajos Rápidos</label>
-                <div class="grid grid-cols-3 gap-1.5">
-                  <button type="button" onclick="applyTripPreset(1, 1, 'Chica fija jueves (ida+vuelta)')" class="px-2 py-2.5 rounded-xl text-xs font-bold bg-purple-500/15 text-purple-600 dark:text-purple-400 hover:bg-purple-500/25 border border-purple-500/20 transition text-center leading-tight">
-                    Fija Jue<br><span class="text-[10px] opacity-80">1+1 (3€)</span>
-                  </button>
-                  <button type="button" onclick="applyTripPreset(1, 2, '3 trayectos habituales')" class="px-2 py-2.5 rounded-xl text-xs font-bold bg-cyan-500/15 text-cyan-600 dark:text-cyan-400 hover:bg-cyan-500/25 border border-cyan-500/20 transition text-center leading-tight">
-                    Habitual<br><span class="text-[10px] opacity-80">3 pl. (4,5€)</span>
-                  </button>
-                  <button type="button" onclick="applyTripPreset(2, 2, '4 trayectos - día cubierto')" class="px-2 py-2.5 rounded-xl text-xs font-bold bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/25 border border-emerald-500/20 transition text-center leading-tight">
-                    Cubierto<br><span class="text-[10px] opacity-80">4 pl. (6€)</span>
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            <!-- Selectores Táctiles de Pasajeros Ida y Vuelta -->
-            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
-              <!-- Pasajeros IDA -->
-              <div class="p-3 rounded-xl bg-slate-50 dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800">
-                <div class="flex justify-between items-center mb-2">
-                  <span class="text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300">↗️ Ida (a la UA)</span>
-                  <span id="ida-money-label" class="text-xs font-bold text-emerald-500">0,00 €</span>
-                </div>
-                <div class="grid grid-cols-5 gap-1.5" id="ida-buttons">
-                  <button type="button" data-val="0" onclick="setPassengers('ida', 0)" class="pax-btn-ida py-2.5 rounded-lg font-extrabold text-sm transition">0</button>
-                  <button type="button" data-val="1" onclick="setPassengers('ida', 1)" class="pax-btn-ida py-2.5 rounded-lg font-extrabold text-sm transition">1</button>
-                  <button type="button" data-val="2" onclick="setPassengers('ida', 2)" class="pax-btn-ida py-2.5 rounded-lg font-extrabold text-sm transition">2</button>
-                  <button type="button" data-val="3" onclick="setPassengers('ida', 3)" class="pax-btn-ida py-2.5 rounded-lg font-extrabold text-sm transition">3</button>
-                  <button type="button" data-val="4" onclick="setPassengers('ida', 4)" class="pax-btn-ida py-2.5 rounded-lg font-extrabold text-sm transition">4</button>
-                </div>
-              </div>
-
-              <!-- Pasajeros VUELTA -->
-              <div class="p-3 rounded-xl bg-slate-50 dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800">
-                <div class="flex justify-between items-center mb-2">
-                  <span class="text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300">↙️ Vuelta (a Sta. Pola)</span>
-                  <span id="vuelta-money-label" class="text-xs font-bold text-emerald-500">0,00 €</span>
-                </div>
-                <div class="grid grid-cols-5 gap-1.5" id="vuelta-buttons">
-                  <button type="button" data-val="0" onclick="setPassengers('vuelta', 0)" class="pax-btn-vuelta py-2.5 rounded-lg font-extrabold text-sm transition">0</button>
-                  <button type="button" data-val="1" onclick="setPassengers('vuelta', 1)" class="pax-btn-vuelta py-2.5 rounded-lg font-extrabold text-sm transition">1</button>
-                  <button type="button" data-val="2" onclick="setPassengers('vuelta', 2)" class="pax-btn-vuelta py-2.5 rounded-lg font-extrabold text-sm transition">2</button>
-                  <button type="button" data-val="3" onclick="setPassengers('vuelta', 3)" class="pax-btn-vuelta py-2.5 rounded-lg font-extrabold text-sm transition">3</button>
-                  <button type="button" data-val="4" onclick="setPassengers('vuelta', 4)" class="pax-btn-vuelta py-2.5 rounded-lg font-extrabold text-sm transition">4</button>
-                </div>
-              </div>
-            </div>
-
-            <!-- Distancia del Trayecto -->
-            <div class="grid grid-cols-1 sm:grid-cols-12 gap-3 items-end">
-              <div class="sm:col-span-8">
-                <label class="block text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">Tipo de recorrido</label>
-                <div class="grid grid-cols-3 gap-1.5">
-                  <button type="button" id="dist-btn-round" onclick="setTripDistanceMode('round')" class="py-2.5 px-2 rounded-xl text-xs font-bold border transition">
-                    Ida+Vuelta (64km)
-                  </button>
-                  <button type="button" id="dist-btn-oneway" onclick="setTripDistanceMode('oneway')" class="py-2.5 px-2 rounded-xl text-xs font-bold border transition">
-                    Solo 1 (32km)
-                  </button>
-                  <button type="button" id="dist-btn-custom" onclick="setTripDistanceMode('custom')" class="py-2.5 px-2 rounded-xl text-xs font-bold border transition">
-                    Otro / Desvío
-                  </button>
-                </div>
-              </div>
-              <div class="sm:col-span-4">
-                <label class="block text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">Km totales</label>
-                <input type="number" step="0.5" id="trip-km" value="64" required oninput="updateTripLivePreview()" class="w-full px-3.5 py-2 rounded-xl bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 focus:border-cyan-500 focus:outline-none font-bold text-center" />
-              </div>
-            </div>
-
-            <!-- Notas y Checkbox Bizum -->
-            <div class="grid grid-cols-1 sm:grid-cols-12 gap-3 items-center">
-              <div class="sm:col-span-7">
-                <input type="text" id="trip-notes" placeholder="Nota opcional (ej. Chica fija jueves + 2 sueltos)" class="w-full px-3.5 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 focus:border-cyan-500 focus:outline-none text-sm" />
-              </div>
-              <div class="sm:col-span-5">
-                <label class="flex items-center gap-2.5 p-2.5 rounded-xl bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 cursor-pointer select-none">
-                  <input type="checkbox" id="trip-paid" checked class="w-5 h-5 rounded accent-emerald-500 cursor-pointer" />
-                  <span class="text-xs font-bold">Cobrado / Bizum OK</span>
-                </label>
-              </div>
-            </div>
-
-            <!-- Previsualización Instantánea antes de Guardar -->
-            <div class="p-3.5 rounded-xl bg-slate-900 dark:bg-slate-950 border border-slate-800 text-white flex items-center justify-between gap-2">
-              <div class="text-xs space-y-0.5">
-                <div class="text-slate-400">Ingresos: <strong id="preview-trip-income" class="text-emerald-400">0,00 €</strong> · Diésel est.: <strong id="preview-trip-cost" class="text-rose-400">-5,11 €</strong></div>
-                <div class="text-[11px] text-slate-500">Consumo est.: <span id="preview-trip-liters">3,01</span> L a <span id="preview-trip-price">1,699</span> €/L</div>
-              </div>
-              <div class="text-right">
-                <span class="block text-[10px] uppercase tracking-wider text-slate-400">Neto Jornada</span>
-                <span id="preview-trip-net" class="text-lg font-extrabold text-rose-400">-5,11 €</span>
-              </div>
-            </div>
-
-            <button type="submit" id="trip-submit-btn" class="w-full py-3.5 rounded-xl bg-gradient-to-r from-cyan-600 to-emerald-600 hover:from-cyan-500 hover:to-emerald-500 text-white font-bold text-sm shadow-lg shadow-cyan-600/20 transition active:scale-[0.99]">
-              Guardar Jornada
-            </button>
-          </form>
-        </div>
-
-        <!-- FORMULARIO B: REGISTRO DE REPOSTAJE (GASOLINERA) -->
-        <div id="panel-form-fuel" class="hidden md:block md:col-span-5 rounded-2xl bg-white dark:bg-corsa-card border border-slate-200 dark:border-corsa-border p-5 shadow-sm flex flex-col justify-between">
           <div>
-            <div class="flex items-center justify-between mb-4">
-              <div class="flex items-center gap-2.5">
-                <span class="p-2 rounded-xl bg-amber-500/15 text-amber-500">
-                  <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg>
-                </span>
-                <div>
-                  <h2 id="fuel-form-title" class="text-base font-bold">Registrar Repostaje</h2>
-                  <p class="text-xs text-slate-500 dark:text-slate-400">Actualiza tu precio €/L al instante</p>
-                </div>
-              </div>
-              <button id="cancel-edit-fuel" onclick="resetFuelForm()" class="hidden text-xs font-semibold text-rose-500 hover:underline">Cancelar</button>
-            </div>
+            <span class="text-xs font-bold uppercase tracking-wider text-slate-300">Meta Semanal (Lun–Dom)</span>
+            <p id="kpi-week-detail" class="text-xs text-slate-400">Faltan 14 trayectos para viajar gratis</p>
+          </div>
+          <div class="text-right">
+            <span id="kpi-week-count" class="text-base font-extrabold text-emerald-400">0 / 14</span>
+            <span class="text-xs text-slate-400 block" id="kpi-week-euros">0,00 € / 21,00 €</span>
+          </div>
+        </div>
+        <div class="w-full h-3 bg-slate-900 rounded-full overflow-hidden border border-slate-700/70">
+          <div id="kpi-week-bar" class="h-full bg-gradient-to-r from-amber-500 via-emerald-500 to-emerald-400 transition-all duration-300" style="width: 0%"></div>
+        </div>
+      </div>
+    </section>
 
-            <form id="fuel-form" class="space-y-4">
-              <input type="hidden" id="fuel-edit-id" value="" />
+    <!-- Navegación por Pestañas -->
+    <nav class="grid grid-cols-4 gap-1.5 bg-slate-900 p-1.5 rounded-2xl border border-slate-800" role="tablist">
+      <button type="button" data-tab="jornada" class="tab-btn tap-btn rounded-xl py-2 px-2 text-xs sm:text-sm font-bold bg-emerald-500 text-slate-950 shadow">
+        🚗 Viaje
+      </button>
+      <button type="button" data-tab="repostaje" class="tab-btn tap-btn rounded-xl py-2 px-2 text-xs sm:text-sm font-semibold text-slate-400 hover:text-white">
+        ⛽ Diésel
+      </button>
+      <button type="button" data-tab="historial" class="tab-btn tap-btn rounded-xl py-2 px-2 text-xs sm:text-sm font-semibold text-slate-400 hover:text-white">
+        📊 Historial
+      </button>
+      <button type="button" data-tab="datos" class="tab-btn tap-btn rounded-xl py-2 px-2 text-xs sm:text-sm font-semibold text-slate-400 hover:text-white">
+        ☁️ Datos
+      </button>
+    </nav>
 
-              <div>
-                <label class="block text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">Fecha de repostaje</label>
-                <input type="date" id="fuel-date" required class="w-full px-3.5 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 focus:border-amber-500 focus:outline-none font-medium" />
-              </div>
+    <!-- TAB 1: REGISTRAR JORNADA -->
+    <section id="panel-jornada" class="tab-panel space-y-4">
+      <form id="form-jornada" class="bg-slate-800/80 border border-slate-700/80 rounded-2xl p-4 sm:p-5 space-y-4" novalidate>
+        <div class="flex items-center justify-between border-b border-slate-700/70 pb-3">
+          <h2 class="text-base font-bold text-white flex items-center gap-2">
+            <span>Registrar Jornada Universitaria</span>
+          </h2>
+          <span id="jornada-day-name" class="text-xs font-semibold px-2.5 py-1 rounded-lg bg-slate-900 text-emerald-400 border border-slate-700">Hoy</span>
+        </div>
 
-              <!-- Importe rápido + Precio por litro -->
-              <div class="grid grid-cols-2 gap-3">
-                <div>
-                  <div class="flex justify-between items-center mb-1.5">
-                    <label class="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Importe (€)</label>
-                    <div class="flex gap-1">
-                      <button type="button" onclick="setQuickFuelAmount(15)" class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-500 hover:bg-amber-500/25">15€</button>
-                      <button type="button" onclick="setQuickFuelAmount(20)" class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-500 hover:bg-amber-500/25">20€</button>
-                    </div>
-                  </div>
-                  <input type="number" step="0.01" id="fuel-amount" value="15.00" required oninput="calculateFuelFromAmount()" class="w-full px-3.5 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 focus:border-amber-500 focus:outline-none font-bold text-amber-500" />
-                </div>
-
-                <div>
-                  <label class="block text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">Precio Diésel (€/L)</label>
-                  <input type="number" step="0.001" id="fuel-price" value="1.699" required oninput="calculateFuelFromAmount()" class="w-full px-3.5 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 focus:border-amber-500 focus:outline-none font-bold" />
-                </div>
-              </div>
-
-              <!-- Litros calculados + Odómetro opcional -->
-              <div class="grid grid-cols-2 gap-3">
-                <div>
-                  <label class="block text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">Litros (auto)</label>
-                  <input type="number" step="0.01" id="fuel-liters" value="8.83" required oninput="calculateFuelFromLiters()" class="w-full px-3.5 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 focus:border-amber-500 focus:outline-none font-bold" />
-                </div>
-                <div>
-                  <label class="block text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">Km Coche (Opcional)</label>
-                  <input type="number" step="1" id="fuel-odometer" placeholder="Ej. 184520" class="w-full px-3.5 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 focus:border-amber-500 focus:outline-none text-sm" />
-                </div>
-              </div>
-
-              <div>
-                <input type="text" id="fuel-notes" placeholder="Gasolinera (ej. Plenoil Santa Pola, Ballenoil...)" class="w-full px-3.5 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 focus:border-amber-500 focus:outline-none text-sm" />
-              </div>
-
-              <!-- Resumen autonomía estimada de esos litros -->
-              <div class="p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-xs flex items-center justify-between">
-                <span class="text-slate-600 dark:text-slate-300">Autonomía estimada (Corsa):</span>
-                <strong id="fuel-est-range" class="text-amber-500 font-bold">~188 km (2,9 días)</strong>
-              </div>
-
-              <button type="submit" id="fuel-submit-btn" class="w-full py-3.5 rounded-xl bg-amber-600 hover:bg-amber-500 text-white font-bold text-sm shadow-lg shadow-amber-600/20 transition active:scale-[0.99]">
-                Guardar Repostaje
-              </button>
-            </form>
+        <!-- Fecha y Tarifa -->
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label for="j-date" class="block text-xs font-semibold text-slate-400 mb-1.5">Fecha del viaje</label>
+            <input type="date" id="j-date" class="w-full h-12 px-3 rounded-xl bg-slate-900 border border-slate-700 text-white text-sm font-medium focus:outline-none focus:border-emerald-500" />
+          </div>
+          <div>
+            <label for="j-price" class="block text-xs font-semibold text-slate-400 mb-1.5">Precio / trayecto (€)</label>
+            <input type="number" id="j-price" step="0.10" min="0" value="1.50" class="w-full h-12 px-3 rounded-xl bg-slate-900 border border-slate-700 text-white text-sm font-bold focus:outline-none focus:border-emerald-500" />
           </div>
         </div>
 
+        <!-- Atajos Rápidos (Presets) -->
+        <div>
+          <span class="block text-xs font-semibold text-slate-400 mb-2">Atajos rápidos de un toque</span>
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+            <button type="button" data-preset="fija-jueves" class="preset-btn tap-btn px-3 py-2.5 rounded-xl bg-slate-900/90 hover:bg-slate-700/80 border border-slate-700 text-left flex sm:flex-col justify-between items-center sm:items-start">
+              <span class="text-xs font-bold text-purple-300">👩‍🎓 Fija Jueves</span>
+              <span class="text-[11px] text-slate-400">1 ida + 1 vuelta (3,00 €)</span>
+            </button>
+            <button type="button" data-preset="dia-habitual" class="preset-btn tap-btn px-3 py-2.5 rounded-xl bg-slate-900/90 hover:bg-slate-700/80 border border-slate-700 text-left flex sm:flex-col justify-between items-center sm:items-start">
+              <span class="text-xs font-bold text-amber-300">🚗 Día habitual</span>
+              <span class="text-[11px] text-slate-400">1 ida + 2 vuelta (4,50 €)</span>
+            </button>
+            <button type="button" data-preset="coche-lleno" class="preset-btn tap-btn px-3 py-2.5 rounded-xl bg-slate-900/90 hover:bg-slate-700/80 border border-slate-700 text-left flex sm:flex-col justify-between items-center sm:items-start">
+              <span class="text-xs font-bold text-emerald-300">🔥 Día rentable</span>
+              <span class="text-[11px] text-slate-400">2 ida + 2 vuelta (6,00 €)</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Selector Pasajeros IDA -->
+        <div class="bg-slate-900/70 border border-slate-700/70 rounded-xl p-3">
+          <div class="flex items-center justify-between mb-2">
+            <span class="text-xs font-bold uppercase tracking-wider text-slate-300">↗️ Ida (Santa Pola → UA)</span>
+            <span id="label-ida-euros" class="text-xs font-bold text-emerald-400">0,00 €</span>
+          </div>
+          <div class="grid grid-cols-5 gap-2" id="pills-ida">
+            <button type="button" data-dir="ida" data-val="0" class="pax-pill tap-btn rounded-xl font-extrabold text-base bg-emerald-500 text-slate-950 border border-emerald-400">0</button>
+            <button type="button" data-dir="ida" data-val="1" class="pax-pill tap-btn rounded-xl font-extrabold text-base bg-slate-800 text-slate-300 border border-slate-700">1</button>
+            <button type="button" data-dir="ida" data-val="2" class="pax-pill tap-btn rounded-xl font-extrabold text-base bg-slate-800 text-slate-300 border border-slate-700">2</button>
+            <button type="button" data-dir="ida" data-val="3" class="pax-pill tap-btn rounded-xl font-extrabold text-base bg-slate-800 text-slate-300 border border-slate-700">3</button>
+            <button type="button" data-dir="ida" data-val="4" class="pax-pill tap-btn rounded-xl font-extrabold text-base bg-slate-800 text-slate-300 border border-slate-700">4</button>
+          </div>
+        </div>
+
+        <!-- Selector Pasajeros VUELTA -->
+        <div class="bg-slate-900/70 border border-slate-700/70 rounded-xl p-3">
+          <div class="flex items-center justify-between mb-2">
+            <span class="text-xs font-bold uppercase tracking-wider text-slate-300">↙️ Vuelta (UA → Santa Pola)</span>
+            <span id="label-vuelta-euros" class="text-xs font-bold text-emerald-400">0,00 €</span>
+          </div>
+          <div class="grid grid-cols-5 gap-2" id="pills-vuelta">
+            <button type="button" data-dir="vuelta" data-val="0" class="pax-pill tap-btn rounded-xl font-extrabold text-base bg-emerald-500 text-slate-950 border border-emerald-400">0</button>
+            <button type="button" data-dir="vuelta" data-val="1" class="pax-pill tap-btn rounded-xl font-extrabold text-base bg-slate-800 text-slate-300 border border-slate-700">1</button>
+            <button type="button" data-dir="vuelta" data-val="2" class="pax-pill tap-btn rounded-xl font-extrabold text-base bg-slate-800 text-slate-300 border border-slate-700">2</button>
+            <button type="button" data-dir="vuelta" data-val="3" class="pax-pill tap-btn rounded-xl font-extrabold text-base bg-slate-800 text-slate-300 border border-slate-700">3</button>
+            <button type="button" data-dir="vuelta" data-val="4" class="pax-pill tap-btn rounded-xl font-extrabold text-base bg-slate-800 text-slate-300 border border-slate-700">4</button>
+          </div>
+        </div>
+
+        <!-- Distancia del día -->
+        <div>
+          <div class="flex items-center justify-between mb-1.5">
+            <label for="j-km" class="text-xs font-semibold text-slate-400">Distancia recorrida (km)</label>
+            <div class="flex gap-1.5">
+              <button type="button" data-km="64" class="km-preset-btn px-2.5 py-1 rounded-lg text-xs font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">64 km (I/V)</button>
+              <button type="button" data-km="32" class="km-preset-btn px-2.5 py-1 rounded-lg text-xs font-semibold bg-slate-900 text-slate-400 border border-slate-700">32 km (1 tray.)</button>
+            </div>
+          </div>
+          <input type="number" id="j-km" step="0.5" min="0" value="64" class="w-full h-12 px-3 rounded-xl bg-slate-900 border border-slate-700 text-white text-sm font-bold focus:outline-none focus:border-emerald-500" />
+        </div>
+
+        <!-- Bizum pendiente & Nota -->
+        <div class="space-y-3 pt-1">
+          <label class="flex items-center justify-between p-3 rounded-xl bg-slate-900/70 border border-slate-700/70 cursor-pointer">
+            <span class="text-xs sm:text-sm font-medium text-slate-200">⏳ ¿Alguno queda pendiente de Bizum?</span>
+            <input type="checkbox" id="j-has-pending" class="w-5 h-5 rounded accent-amber-500" />
+          </label>
+
+          <div id="pending-amount-box" class="hidden">
+            <label for="j-pending-amount" class="block text-xs font-semibold text-amber-300 mb-1">Importe pendiente de cobrar (€)</label>
+            <input type="number" id="j-pending-amount" step="0.50" min="0" value="1.50" class="w-full h-12 px-3 rounded-xl bg-slate-900 border border-amber-500/50 text-amber-300 text-sm font-bold focus:outline-none" />
+          </div>
+
+          <div>
+            <label for="j-note" class="block text-xs font-semibold text-slate-400 mb-1">Nota opcional</label>
+            <input type="text" id="j-note" placeholder="Ej: Fija jueves + 2 del grupo..." class="w-full h-11 px-3 rounded-xl bg-slate-900 border border-slate-700 text-white text-sm placeholder:text-slate-500 focus:outline-none focus:border-emerald-500" />
+          </div>
+        </div>
+
+        <!-- Tarjeta Resumen en Vivo -->
+        <div id="live-summary-card" class="rounded-xl p-3.5 bg-slate-900 border border-slate-700 space-y-1.5">
+          <div class="flex justify-between text-xs text-slate-400">
+            <span>Ingresos (<span id="prev-trips">0</span> trayectos):</span>
+            <span id="prev-income" class="font-bold text-white">0,00 €</span>
+          </div>
+          <div class="flex justify-between text-xs text-slate-400">
+            <span>Diésel est. (<span id="prev-liters">3,01</span> L a <span id="prev-diesel-price">1,699</span> €/L):</span>
+            <span id="prev-fuel-cost" class="font-bold text-amber-400">-5,11 €</span>
+          </div>
+          <div class="border-t border-slate-800 pt-2 flex justify-between items-center">
+            <span class="text-xs font-bold uppercase tracking-wider text-slate-300">Neto de la Jornada</span>
+            <span id="prev-net" class="text-lg font-extrabold text-rose-400">-5,11 €</span>
+          </div>
+        </div>
+
+        <!-- Botón Guardar Jornada -->
+        <button type="submit" id="btn-save-jornada" class="tap-btn w-full py-3.5 px-4 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-extrabold text-base shadow-lg shadow-emerald-500/20 flex items-center justify-center gap-2">
+          <span>✅ Guardar Jornada</span>
+        </button>
+      </form>
+    </section>
+
+    <!-- TAB 2: REGISTRAR REPOSTAJE -->
+    <section id="panel-repostaje" class="tab-panel hidden space-y-4">
+      <form id="form-repostaje" class="bg-slate-800/80 border border-slate-700/80 rounded-2xl p-4 sm:p-5 space-y-4" novalidate>
+        <div class="border-b border-slate-700/70 pb-3">
+          <h2 class="text-base font-bold text-white">Registrar Repostaje de Diésel</h2>
+          <p class="text-xs text-slate-400">Actualiza automáticamente el precio de referencia €/L</p>
+        </div>
+
+        <div>
+          <label for="f-date" class="block text-xs font-semibold text-slate-400 mb-1.5">Fecha del repostaje</label>
+          <input type="date" id="f-date" class="w-full h-12 px-3 rounded-xl bg-slate-900 border border-slate-700 text-white text-sm font-medium focus:outline-none focus:border-amber-500" />
+        </div>
+
+        <!-- Atajos rápidos de euros -->
+        <div>
+          <span class="block text-xs font-semibold text-slate-400 mb-2">Importe habitual</span>
+          <div class="grid grid-cols-5 gap-1.5">
+            <button type="button" data-euros="10" class="fuel-preset-btn tap-btn rounded-xl py-2 text-xs font-bold bg-slate-900 border border-slate-700 text-slate-300">10 €</button>
+            <button type="button" data-euros="15" class="fuel-preset-btn tap-btn rounded-xl py-2 text-xs font-bold bg-amber-500/20 border border-amber-500/40 text-amber-300">15 €</button>
+            <button type="button" data-euros="20" class="fuel-preset-btn tap-btn rounded-xl py-2 text-xs font-bold bg-slate-900 border border-slate-700 text-slate-300">20 €</button>
+            <button type="button" data-euros="30" class="fuel-preset-btn tap-btn rounded-xl py-2 text-xs font-bold bg-slate-900 border border-slate-700 text-slate-300">30 €</button>
+            <button type="button" data-euros="45" class="fuel-preset-btn tap-btn rounded-xl py-2 text-xs font-bold bg-slate-900 border border-slate-700 text-slate-300">Lleno</button>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label for="f-euros" class="block text-xs font-semibold text-slate-400 mb-1.5">Importe pagado (€)</label>
+            <input type="number" id="f-euros" step="0.01" min="0.1" value="15.00" class="w-full h-12 px-3 rounded-xl bg-slate-900 border border-slate-700 text-white text-base font-extrabold focus:outline-none focus:border-amber-500" />
+          </div>
+          <div>
+            <label for="f-price" class="block text-xs font-semibold text-slate-400 mb-1.5">Precio Diésel (€/L)</label>
+            <input type="number" id="f-price" step="0.001" min="0.1" value="1.699" class="w-full h-12 px-3 rounded-xl bg-slate-900 border border-slate-700 text-white text-base font-extrabold focus:outline-none focus:border-amber-500" />
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label for="f-liters" class="block text-xs font-semibold text-slate-400 mb-1.5">Litros repostados (L)</label>
+            <input type="number" id="f-liters" step="0.01" min="0.1" value="8.83" class="w-full h-12 px-3 rounded-xl bg-slate-900 border border-slate-700 text-emerald-400 text-base font-bold focus:outline-none focus:border-amber-500" />
+          </div>
+          <div>
+            <label for="f-odo" class="block text-xs font-semibold text-slate-400 mb-1.5">Cuentakm (opcional)</label>
+            <input type="number" id="f-odo" step="1" min="0" placeholder="Ej: 184520" class="w-full h-12 px-3 rounded-xl bg-slate-900 border border-slate-700 text-white text-sm font-medium placeholder:text-slate-600 focus:outline-none focus:border-amber-500" />
+          </div>
+        </div>
+
+        <div>
+          <label for="f-note" class="block text-xs font-semibold text-slate-400 mb-1">Gasolinera / nota (opcional)</label>
+          <input type="text" id="f-note" placeholder="Ej: Plenoil Santa Pola..." class="w-full h-11 px-3 rounded-xl bg-slate-900 border border-slate-700 text-white text-sm placeholder:text-slate-500 focus:outline-none focus:border-amber-500" />
+        </div>
+
+        <div class="rounded-xl p-3 bg-slate-900 border border-slate-700 flex items-center justify-between text-xs">
+          <span class="text-slate-400">Autonomía estimada de este repostaje:</span>
+          <span id="f-est-range" class="font-bold text-amber-400">~188 km (2,9 días uni)</span>
+        </div>
+
+        <button type="submit" id="btn-save-repostaje" class="tap-btn w-full py-3.5 px-4 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-extrabold text-base shadow-lg shadow-amber-500/20 flex items-center justify-center gap-2">
+          <span>⛽ Guardar Repostaje</span>
+        </button>
+      </form>
+    </section>
+
+    <!-- TAB 3: HISTORIAL Y GRÁFICAS -->
+    <section id="panel-historial" class="tab-panel hidden space-y-4">
+      <!-- Gráfica Mensual SVG -->
+      <div class="bg-slate-800/80 border border-slate-700/80 rounded-2xl p-4">
+        <div class="flex items-center justify-between mb-3">
+          <h3 class="text-sm font-bold text-white">Ingresos vs. Gasto Diésel (Mensual)</h3>
+          <div class="flex items-center gap-3 text-[11px]">
+            <span class="flex items-center gap-1 text-emerald-400"><span class="w-2.5 h-2.5 rounded-sm bg-emerald-500 inline-block"></span>Ingresos</span>
+            <span class="flex items-center gap-1 text-amber-400"><span class="w-2.5 h-2.5 rounded-sm bg-amber-500 inline-block"></span>Diésel</span>
+          </div>
+        </div>
+        <div id="chart-container" class="w-full overflow-x-auto"></div>
+      </div>
+
+      <!-- Filtros -->
+      <div class="flex gap-1.5 overflow-x-auto pb-1">
+        <button type="button" data-filter="all" class="filter-btn tap-btn px-3.5 py-2 rounded-xl text-xs font-bold bg-emerald-500 text-slate-950 shrink-0">Todos</button>
+        <button type="button" data-filter="trips" class="filter-btn tap-btn px-3.5 py-2 rounded-xl text-xs font-semibold bg-slate-800 text-slate-300 border border-slate-700 shrink-0">Solo Viajes</button>
+        <button type="button" data-filter="fuel" class="filter-btn tap-btn px-3.5 py-2 rounded-xl text-xs font-semibold bg-slate-800 text-slate-300 border border-slate-700 shrink-0">Solo Diésel</button>
+        <button type="button" data-filter="pending" class="filter-btn tap-btn px-3.5 py-2 rounded-xl text-xs font-semibold bg-slate-800 text-amber-300 border border-slate-700 shrink-0">⏳ Bizum Pendiente</button>
+      </div>
+
+      <!-- Lista de Movimientos -->
+      <div id="history-list" class="space-y-2.5"></div>
+    </section>
+
+    <!-- TAB 4: DATOS, BACKUP Y BACKEND NUBE -->
+    <section id="panel-datos" class="tab-panel hidden space-y-4">
+      <!-- Ajustes del Coche -->
+      <div class="bg-slate-800/80 border border-slate-700/80 rounded-2xl p-4 space-y-3">
+        <h3 class="text-sm font-bold text-white">⚙️ Parámetros de tu Opel Corsa</h3>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label for="cfg-consumption" class="block text-xs text-slate-400 mb-1">Consumo medio (L/100km)</label>
+            <input type="number" id="cfg-consumption" step="0.1" value="4.7" class="w-full h-11 px-3 rounded-xl bg-slate-900 border border-slate-700 text-white text-sm font-bold" />
+          </div>
+          <div>
+            <label for="cfg-weekly-target" class="block text-xs text-slate-400 mb-1">Meta trayectos/semana</label>
+            <input type="number" id="cfg-weekly-target" step="1" value="14" class="w-full h-11 px-3 rounded-xl bg-slate-900 border border-slate-700 text-white text-sm font-bold" />
+          </div>
+        </div>
+        <button type="button" id="btn-save-settings" class="tap-btn w-full py-2.5 rounded-xl bg-slate-700 hover:bg-slate-600 text-white text-xs font-bold">
+          Guardar Parámetros
+        </button>
+      </div>
+
+      <!-- Exportación e Importación Local -->
+      <div class="bg-slate-800/80 border border-slate-700/80 rounded-2xl p-4 space-y-3">
+        <h3 class="text-sm font-bold text-white">💾 Copias de Seguridad y Excel</h3>
+        <p class="text-xs text-slate-400">Tus datos se guardan automáticamente en la base de datos interna de tu navegador (IndexedDB + LocalStorage).</p>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+          <button type="button" id="btn-export-csv" class="tap-btn py-3 px-4 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 text-xs font-bold flex items-center justify-center gap-2">
+            📥 Exportar CSV (Excel)
+          </button>
+          <button type="button" id="btn-export-json" class="tap-btn py-3 px-4 rounded-xl bg-slate-900 border border-slate-700 text-slate-200 text-xs font-bold flex items-center justify-center gap-2">
+            📦 Descargar Backup JSON
+          </button>
+        </div>
+        <div>
+          <label class="tap-btn w-full py-3 px-4 rounded-xl bg-slate-900 border border-dashed border-slate-600 text-slate-300 text-xs font-semibold flex items-center justify-center gap-2 cursor-pointer hover:border-slate-400">
+            <span>📤 Restaurar desde archivo JSON</span>
+            <input type="file" id="input-import-json" accept=".json,application/json" class="hidden" />
+          </label>
+        </div>
+      </div>
+
+      <!-- Backend Nube Opcional (Firebase Realtime Database REST API sin SDK externo) -->
+      <div class="bg-slate-800/80 border border-slate-700/80 rounded-2xl p-4 space-y-3">
+        <div class="flex items-center justify-between">
+          <h3 class="text-sm font-bold text-white">☁️ Sincronización Nube (Opcional)</h3>
+          <span id="cloud-badge" class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-slate-900 text-slate-400 border border-slate-700">Solo Local</span>
+        </div>
+        <p class="text-xs text-slate-400 leading-relaxed">
+          Si quieres sincronizar tus datos entre el móvil y el PC usando un backend gratuito, crea una <strong>Realtime Database</strong> en Firebase (modo prueba) y pega aquí su URL (ej. <code class="text-slate-300">https://tu-app-default-rtdb.europe-west1.firebasedatabase.app</code>).
+        </p>
+        <input type="url" id="cfg-firebase-url" placeholder="https://tu-proyecto.firebasedatabase.app" class="w-full h-11 px-3 rounded-xl bg-slate-900 border border-slate-700 text-white text-xs font-mono placeholder:text-slate-600 focus:outline-none focus:border-emerald-500" />
+        <div class="grid grid-cols-2 gap-2">
+          <button type="button" id="btn-cloud-sync" class="tap-btn py-2.5 px-3 rounded-xl bg-sky-500/20 border border-sky-500/40 text-sky-300 text-xs font-bold">
+            🔄 Sincronizar Ahora
+          </button>
+          <button type="button" id="btn-cloud-disconnect" class="tap-btn py-2.5 px-3 rounded-xl bg-slate-900 border border-slate-700 text-slate-400 text-xs font-semibold">
+            Desconectar Nube
+          </button>
+        </div>
+      </div>
+
+      <!-- Zona de Pruebas / Borrado -->
+      <div class="bg-slate-800/50 border border-slate-800 rounded-2xl p-4 flex flex-wrap gap-2 justify-between items-center">
+        <button type="button" id="btn-load-demo" class="tap-btn px-3.5 py-2 rounded-xl bg-slate-800 border border-slate-700 text-xs font-semibold text-slate-300">
+          ✨ Cargar semana de ejemplo
+        </button>
+        <button type="button" id="btn-reset-all" class="tap-btn px-3.5 py-2 rounded-xl bg-rose-500/15 border border-rose-500/30 text-xs font-bold text-rose-400">
+          🗑️ Borrar todos los datos
+        </button>
       </div>
     </section>
 
-    <!-- 3. GRÁFICA COMPARATIVA (INGRESOS VS GASTO EN DIÉSEL) -->
-    <section aria-label="Gráfica Comparativa" class="rounded-2xl bg-white dark:bg-corsa-card border border-slate-200 dark:border-corsa-border p-5 shadow-sm">
-      <div class="flex flex-wrap items-center justify-between gap-2 mb-4">
-        <div>
-          <h3 class="text-base font-bold">Ingresos vs. Gasto en Diésel</h3>
-          <p class="text-xs text-slate-500 dark:text-slate-400">Comparativa semanal de lo cobrado a pasajeros frente al coste estimado de ruta y repostajes</p>
-        </div>
-        <div class="flex items-center gap-3 text-xs">
-          <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-sm bg-emerald-500"></span>Ingresos</span>
-          <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-sm bg-cyan-500"></span>Diésel Ruta</span>
-          <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-sm bg-amber-500"></span>Surtidor</span>
-        </div>
-      </div>
-      <div class="relative h-56 sm:h-64 w-full">
-        <canvas id="finance-chart"></canvas>
-      </div>
-    </section>
+  </main>
 
-    <!-- 4. HISTORIAL, FILTROS Y EXPORTACIÓN / BACKUP -->
-    <section aria-label="Historial y Backup" class="rounded-2xl bg-white dark:bg-corsa-card border border-slate-200 dark:border-corsa-border p-5 shadow-sm space-y-4">
-      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div>
-          <h3 class="text-base font-bold">Historial de Movimientos</h3>
-          <p class="text-xs text-slate-500 dark:text-slate-400">Pulsa en un Bizum pendiente para marcarlo como cobrado</p>
-        </div>
+  <script>
+    (function () {
+      'use strict';
 
-        <!-- Botones Exportar / Importar -->
-        <div class="flex flex-wrap items-center gap-2">
-          <button onclick="exportCSV()" class="px-3 py-2 rounded-xl text-xs font-semibold bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 transition flex items-center gap-1.5">
-            <svg class="w-4 h-4 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a
+      // ==========================================
+      // 1. MOTOR DE BASE DE DATOS (IndexedDB + LocalStorage + Cloud REST)
+      // ==========================================
+      const DB_NAME = 'CorsaTrackerUA_DB';
+      const DB_VERSION = 1;
+      const STORE_NAME = 'app_state';
+      const LS_KEY = 'corsatracker_ua_v2';
+
+      const DEFAULT_STATE = {
+        trips: [],
+        fuels: [],
+        settings: {
+          consumption: 4.7,
+          weeklyTarget: 14,
+          lastDieselPrice: 1.699,
+          firebaseUrl: ''
+        },
+        updatedAt: 0
+      };
+
+      let state = JSON.parse(JSON.stringify(DEFAULT_STATE));
+      let ui = {
+        activeTab: 'jornada',
+        ida: 0,
+        vuelta: 0,
+        filter: 'all',
+        lastDeleted: null
+      };
+
+      function openIndexedDB() {
+        return new Promise((resolve, reject) => {
+          if (!('indexedDB' in window)) {
+            reject(new Error('IndexedDB no soportado'));
+            return;
+          }
+          const req = indexedDB.open(DB_NAME, DB_VERSION);
+          req.onupgradeneeded = (e) => {
+            const db = e.target.result;
+            if (!db.objectStoreNames.contains(STORE_NAME)) {
+              db.createObjectStore(STORE_NAME);
+            }
+          };
+          req.onsuccess = () => resolve(req.result);
+          req.onerror = () => reject(req.error);
+        });
+      }
+
+      async function loadStateFromDB() {
+        let loaded = null;
+        // 1. Intentar IndexedDB
+        try {
+          const db = await openIndexedDB();
+          loaded = await new Promise((resolve, reject) => {
+            const tx = db.transaction(STORE_NAME, 'readonly');
+            const store = tx.objectStore(STORE_NAME);
+            const req = store.get('main');
+            req.onsuccess = () => resolve(req.result || null);
+            req.onerror = () => reject(req.error);
+          });
+        } catch (err) {
+          console.warn('Fallback a localStorage:', err);
+        }
+
+        // 2. Fallback o comparación con localStorage
+        try {
+          const rawLS = localStorage.getItem(LS_KEY);
+          if (rawLS) {
+            const parsedLS = JSON.parse(rawLS);
+            if (!loaded || (parsedLS.updatedAt || 0) > (loaded.updatedAt || 0)) {
+              loaded = parsedLS;
+            }
+          }
+        } catch (err) {
+          console.warn('Error leyendo localStorage:', err);
+        }
+
+        if (loaded) {
+          state = {
+            trips: Array.isArray(loaded.trips) ? loaded.trips : [],
+            fuels: Array.isArray(loaded.fuels) ? loaded.fuels : [],
+            settings: { ...DEFAULT_STATE.settings, ...(loaded.settings || {}) },
+            updatedAt: loaded.updatedAt || Date.now()
+          };
+        }
+      }
+
+      async function persistState(skipCloud = false) {
+        state.updatedAt = Date.now();
+        // Guardar espejo en localStorage
+        try {
+          localStorage.setItem(LS_KEY, JSON.stringify(state));
+        } catch (e) {
+          console.warn('No se pudo guardar en localStorage:', e);
+        }
+
+        // Guardar en IndexedDB
+        try {
+          const db = await openIndexedDB();
+          await new Promise((resolve, reject) => {
+            const tx = db.transaction(STORE_NAME, 'readwrite');
+            const store = tx.objectStore(STORE_NAME);
+            const req = store.put(state, 'main');
+            req.onsuccess = () => resolve();
+            req.onerror = () => reject(req.error);
+          });
+          setStorageIndicator('Local DB', 'emerald');
+        } catch (e) {
+          setStorageIndicator('LocalStorage', 'amber');
+        }
+
+        // Sincronización automática con Firebase si está configurado
+        if (!skipCloud && state.settings.firebaseUrl) {
+          pushToFirebase().catch(() => {});
+        }
+      }
+
+      // ==========================================
+      // 2. BACKEND NUBE OPCIONAL (FIREBASE REST)
+      // ==========================================
+      function normalizeFirebaseUrl(url) {
+        if (!url) return '';
+        let clean = url.trim().replace(/\/+$/, '');
+        if (!clean.startsWith('https://')) return '';
+        return clean + '/corsatracker_juan.json';
+      }
+
+      async function pushToFirebase() {
+        const endpoint = normalizeFirebaseUrl(state.settings.firebaseUrl);
+        if (!endpoint) return false;
+        setStorageIndicator('Sincronizando...', 'sky');
+        const res = await fetch(endpoint, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(state)
+        });
+        if (!res.ok) throw new Error('Error HTTP ' + res.status);
+        setStorageIndicator('Nube OK', 'emerald');
+        return true;
+      }
+
+      async function syncWithFirebase(manual = false) {
+        const endpoint = normalizeFirebaseUrl(state.settings.firebaseUrl);
+        if (!endpoint) {
+          if (manual) showToast('Introduce una URL válida de Firebase (https://...)', 'amber');
+          return;
+        }
+        try {
+          setStorageIndicator('Conectando...', 'sky');
+          const res = await fetch(endpoint);
+          if (!res.ok) throw new Error('HTTP ' + res.status);
+          const remote = await res.json();
+
+          if (remote && (remote.updatedAt || 0) > (state.updatedAt || 0)) {
+            state = {
+              trips: Array.isArray(remote.trips) ? remote.trips : [],
+              fuels: Array.isArray(remote.fuels) ? remote.fuels : [],
+              settings: { ...DEFAULT_STATE.settings, ...(remote.settings || {}), firebaseUrl: state.settings.firebaseUrl },
+              updatedAt: remote.updatedAt
+            };
+            await persistState(true);
+            refreshAllUI();
+            if (manual) showToast('Datos descargados desde la nube ☁️', 'emerald');
+          } else {
+            await pushToFirebase();
+            if (manual) showToast('Datos sincronizados con la nube ☁️', 'emerald');
+          }
+          setStorageIndicator('Nube Activa', 'emerald');
+        } catch (err) {
+          setStorageIndicator('Error Nube', 'rose');
+          if (manual) showToast('No se pudo conectar con Firebase. Revisa la URL y reglas.', 'rose');
+        }
+      }
+
+      function setStorageIndicator(text, color) {
+        const label = document.getElementById('storage-label');
+        const dot = document.getElementById('storage-dot');
+        if (label) label.textContent = text;
+        if (dot) {
+          dot.className = 'w-2 h-2 rounded-full ' + (
+            color === 'emerald' ? 'bg-emerald-400' :
+            color === 'sky' ? 'bg-sky-400 animate-pulse' :
+            color === 'amber' ? 'bg-amber-400' : 'bg-rose-500'
+          );
+        }
+      }
+
+      // ==========================================
+      // 3. UTILIDADES DE FECHA Y FORMATO
+      // ==========================================
+      function getTodayISO() {
+        const now = new Date();
+        const offset = now.getTimezoneOffset() * 60000;
+        return new Date(now.getTime() - offset).toISOString().slice(0, 10);
+      }
+
+      function formatEuro(num) {
+        const val = Number(num) || 0;
+        return val.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €';
+      }
+
+      function formatNum(num, decimals = 2) {
+        const val = Number(num) || 0;
+        return val.toLocaleString('es-ES', { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
+      }
+
+      function formatDateES(isoDate) {
+        if (!isoDate) return '';
+        const parts = isoDate.split('-');
+        if (parts.length !== 3) return isoDate;
+        const d = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
+        const days = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
+        return `${days[d.getDay()]} ${parts[2]}/${parts[1]}/${parts[0].slice(2)}`;
+      }
+
+      function getWeekBounds(dateStr) {
+        const parts = (dateStr || getTodayISO()).split('-');
+        const d = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
+        const day = d.getDay();
+        const diffToMonday = d.getDate() - day + (day === 0 ? -6 : 1);
+        const monday = new Date(d.getFullYear(), d.getMonth(), diffToMonday);
+        const sunday = new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + 6);
+        const toISO = (dt) => {
+          const off = dt.getTimezoneOffset() * 60000;
+          return new Date(dt.getTime() - off).toISOString().slice(0, 10);
+        };
+        return { start: toISO(monday), end: toISO(sunday) };
+      }
+
+      function showToast(message, type = 'emerald', undoCallback = null) {
+        const container = document.getElementById('toast-container');
+        const toast = document.createElement('div');
+        const borderCol = type === 'emerald' ? 'border-emerald-500/50' : type === 'amber' ? 'border-amber-500/50' : 'border-rose-500/50';
+        toast.className = `pointer-events-auto bg-slate-900/95 backdrop-blur-md text-white border ${borderCol} rounded-2xl px-4 py-3 shadow-2xl flex items-center justify-between gap-3 text-xs sm:text-sm font-medium transition-all duration-200`;
+
+        const textSpan = document.createElement('span');
+        textSpan.textContent = message;
+        toast.appendChild(textSpan);
+
+        if (undoCallback) {
+          const undoBtn = document.createElement('button');
+          undoBtn.type = 'button';
+          undoBtn.textContent = 'Deshacer';
+          undoBtn.className = 'px-2.5 py-1 rounded-lg bg-emerald-500 text-slate-950 font-bold text-xs shrink-0';
+          undoBtn.addEventListener('click', () => {
+            undoCallback();
+            toast.remove();
+          });
+          toast.appendChild(undoBtn);
+        }
+
+        container.appendChild(toast);
+        setTimeout(() => {
+          toast.style.opacity = '0';
+          setTimeout(() => toast.remove(), 220);
+        }, undoCallback ? 5000 : 2800);
+      }
+
+      // ==========================================
+      // 4. CÁLCULOS Y ACTUALIZACIÓN DE INTERFAZ
+      // ==========================================
+      function getEffectiveConsumption() {
+        // Si hay al menos 2 repostajes con cuentakilómetros válido, calcular consumo real
+        const withOdo = state.fuels
+          .filter(f => Number(f.odometer) > 0)
+          .sort((a, b) => Number(a.odometer) - Number(b.odometer));
+
+        if (withOdo.length >= 2) {
+          const first = withOdo[0];
+          const last = withOdo[withOdo.length - 1];
+          const kmDiff = Number(last.odometer) - Number(first.odometer);
+          if (kmDiff >= 100) {
+            let litersSum = 0;
+            for (let i = 1; i < withOdo.length; i++) {
+              litersSum += Number(withOdo[i].liters) || 0;
+            }
+            const realCons = (litersSum / kmDiff) * 100;
+            if (realCons >= 3.0 && realCons <= 9.0) {
+              return { value: Number(realCons.toFixed(2)), isReal: true };
+            }
+          }
+        }
+        return { value: Number(state.settings.consumption) || 4.7, isReal: false };
+      }
+
+      function updateJornadaPreview() {
+        const pricePerTrip = parseFloat(document.getElementById('j-price').value) || 0;
+        const km = parseFloat(document.getElementById('j-km').value) || 0;
+        const cons = getEffectiveConsumption().value;
+        const dieselPrice = Number(state.settings.lastDieselPrice) || 1.699;
+
+        const idaEuros = ui.ida * pricePerTrip;
+        const vueltaEuros = ui.vuelta * pricePerTrip;
+        const totalTrips = ui.ida + ui.vuelta;
+        const totalIncome = idaEuros + vueltaEuros;
+
+        const litersUsed = (km * cons) / 100;
+        const fuelCost = litersUsed * dieselPrice;
+        const net = totalIncome - fuelCost;
+
+        document.getElementById('label-ida-euros').textContent = formatEuro(idaEuros);
+        document.getElementById('label-vuelta-euros').textContent = formatEuro(vueltaEuros);
+        document.getElementById('prev-trips').textContent = totalTrips;
+        document.getElementById('prev-income').textContent = formatEuro(totalIncome);
+        document.getElementById('prev-liters').textContent = formatNum(litersUsed, 2);
+        document.getElementById('prev-diesel-price').textContent = formatNum(dieselPrice, 3);
+        document.getElementById('prev-fuel-cost').textContent = '-' + formatEuro(fuelCost);
+
+        const netEl = document.getElementById('prev-net');
+        netEl.textContent = (net >= 0 ? '+' : '') + formatEuro(net);
+        netEl.className = 'text-lg font-extrabold ' + (net >= -0.01 ? 'text-emerald-400' : 'text-rose-400');
+
+        // Actualizar etiqueta día de la semana
+        const dateVal = document.getElementById('j-date').value;
+        const dayLabel = document.getElementById('jornada-day-name');
+        if (dateVal === getTodayISO()) {
+          dayLabel.textContent = 'Hoy';
+        } else {
+          dayLabel.textContent = formatDateES(dateVal);
+        }
+      }
+
+      function updateFuelPreview(source = 'euros') {
+        const eurosInput = document.getElementById('f-euros');
+        const priceInput = document.getElementById('f-price');
+        const litersInput = document.getElementById('f-liters');
+
+        const price = parseFloat(priceInput.value) || 0;
+        if (price > 0) {
+          if (source === 'euros' || source === 'price') {
+            const euros = parseFloat(eurosInput.value) || 0;
+            litersInput.value = (euros / price).toFixed(2);
+          } else if (source === 'liters') {
+            const liters = parseFloat(litersInput.value) || 0;
+            eurosInput.value = (liters * price).toFixed(2);
+          }
+        }
+
+        const liters = parseFloat(litersInput.value) || 0;
+        const cons = getEffectiveConsumption().value;
+        const estKm = cons > 0 ? (liters / cons) * 100 : 0;
+        const estDays = estKm / 64;
+        document.getElementById('f-est-range').textContent = `~${Math.round(estKm)} km (${formatNum(estDays, 1)} días uni)`;
+      }
+
+      function refreshDashboard() {
+        const today = getTodayISO();
+        const currentMonth = today.slice(0, 7); // YYYY-MM
+        const weekBounds = getWeekBounds(today);
+        const consObj = getEffectiveConsumption();
+
+        // 1. Totales de caja real
+        let totalCollected = 0;
+        let totalPendingBizum = 0;
+        let monthIncome = 0;
+        let monthEstFuelCost = 0;
+        let weekTrips = 0;
+        let weekIncome = 0;
+
+        state.trips.forEach(t => {
+          const inc = Number(t.income) || 0;
+          const pend = Number(t.pendingAmount) || 0;
+          totalCollected += Math.max(0, inc - pend);
+          totalPendingBizum += pend;
+
+          if ((t.date || '').startsWith(currentMonth)) {
+            monthIncome += inc;
+            monthEstFuelCost += Number(t.estFuelCost) || 0;
+          }
+
+          if (t.date >= weekBounds.start && t.date <= weekBounds.end) {
+            weekTrips += Number(t.totalTrips) || 0;
+            weekIncome += inc;
+          }
+        });
+
+        const totalSpentFuel = state.fuels.reduce((acc, f) => acc + (Number(f.euros) || 0), 0);
+        const cashBalance = totalCollected - totalSpentFuel;
+
+        const cashEl = document.getElementById('kpi-cash-balance');
+        cashEl.textContent = (cashBalance >= 0 ? '+' : '') + formatEuro(cashBalance);
+        cashEl.className = 'text-2xl sm:text-3xl font-extrabold tracking-tight ' + (cashBalance >= 0 ? 'text-emerald-400' : 'text-white');
+        document.getElementById('kpi-cash-sub').textContent = `Cobrado: ${formatEuro(totalCollected)} · Diésel: ${formatEuro(totalSpentFuel)}`;
+
+        const bizumBadge = document.getElementById('badge-bizum-pending');
+        if (totalPendingBizum > 0.01) {
+          bizumBadge.textContent = `${formatEuro(totalPendingBizum)} pend.`;
+          bizumBadge.classList.remove('hidden');
+        } else {
+          bizumBadge.classList.add('hidden');
+        }
+
+        // 2. Rentabilidad mes actual (Ingresos vs Diésel estimado quemado)
+        const monthNet = monthIncome - monthEstFuelCost;
+        const monthEl = document.getElementById('kpi-month-net');
+        monthEl.textContent = (monthNet >= 0 ? '+' : '') + formatEuro(monthNet);
+        monthEl.className = 'text-2xl sm:text-3xl font-extrabold tracking-tight ' + (monthNet >= -0.01 ? 'text-emerald-400' : 'text-amber-400');
+        document.getElementById('kpi-month-sub').textContent = `Ingresos: ${formatEuro(monthIncome)} · Ruta: -${formatEuro(monthEstFuelCost)}`;
+        document.getElementById('kpi-consumption-badge').textContent = `${formatNum(consObj.value, 1)} L/100${consObj.isReal ? ' real' : ''}`;
+
+        // 3. Meta semanal
+        const target = Number(state.settings.weeklyTarget) || 14;
+        const targetEuros = target * 1.5;
+        const pct = Math.min(100, Math.round((weekTrips / target) * 100));
+        const remaining = Math.max(0, target - weekTrips);
+
+        document.getElementById('kpi-week-count').textContent = `${weekTrips} / ${target}`;
+        document.getElementById('kpi-week-euros').textContent = `${formatEuro(weekIncome)} / ${formatEuro(targetEuros)}`;
+        document.getElementById('kpi-week-bar').style.width = `${pct}%`;
+
+        const weekDetailEl = document.getElementById('kpi-week-detail');
+        if (remaining === 0) {
+          weekDetailEl.textContent = `🎉 ¡Objetivo cumplido! Todo lo extra esta semana es ganancia limpia.`;
+          weekDetailEl.className = 'text-xs text-emerald-400 font-semibold';
+        } else {
+          weekDetailEl.textContent = `Faltan ${remaining} trayecto${remaining === 1 ? '' : 's'} esta semana para cubrir el diésel.`;
+          weekDetailEl.className = 'text-xs text-slate-400';
+        }
+      }
+
+      function renderHistory() {
+        const container = document.getElementById('history-list');
+        const items = [];
+
+        if (ui.filter === 'all' || ui.filter === 'trips' || ui.filter === 'pending') {
+          state.trips.forEach(t => {
+            if (ui.filter === 'pending' && !(Number(t.pendingAmount) > 0)) return;
+            items.push({ kind: 'trip', date: t.date, createdAt: t.createdAt || 0, data: t });
+          });
+        }
+        if (ui.filter === 'all' || ui.filter === 'fuel') {
+          state.fuels.forEach(f => {
+            items.push({ kind: 'fuel', date: f.date, createdAt: f.createdAt || 0, data: f });
+          });
+        }
+
+        items.sort((a, b) => b.date.localeCompare(a.date) || b.createdAt - a.createdAt);
+
+        if (items.length === 0) {
+          container.innerHTML = `
+            <div class="bg-slate-800/50 border border-slate-800 rounded-2xl p-8 text-center">
+              <p class="text-sm font-semibold text-slate-300">No hay registros en esta vista</p>
+              <p class="text-xs text-slate-500 mt-1">Apunta tu primer viaje o repostaje desde las pestañas superiores.</p>
+            </div>
+          `;
+          return;
+        }
+
+        container.innerHTML = items.map(item => {
+          if (item.kind === 'trip') {
+            const t = item.data;
+            const net = (Number(t.income) || 0) - (Number(t.estFuelCost) || 0);
+            const pending = Number(t.pendingAmount) || 0;
+            return `
+              <div class="bg-slate-800/80 border ${pending > 0 ? 'border-amber-500/40' : 'border-slate-700/80'} rounded-2xl p-3.5 flex items-center justify-between gap-3">
+                <div class="min-w-0 flex-1">
+                  <div class="flex flex-wrap items-center gap-2">
+                    <span class="text-xs font-bold text-slate-300">${formatDateES(t.date)}</span>
+                    <span class="text-[11px] font-semibold px-2 py-0.5 rounded-md bg-emerald-500/15 text-emerald-300">
+                      ${t.ida} ida + ${t.vuelta} vuelta (${t.km} km)
+                    </span>
+                    ${pending > 0 ? `<span class="text-[11px] font-bold px-2 py-0.5 rounded-md bg-amber-500/20 text-amber-300">⏳ ${formatEuro(pending)} Bizum</span>` : ''}
+                  </div>
+                  <p class="text-xs text-slate-400 mt-1 truncate">
+                    Ingreso: <strong class="text-slate-200">${formatEuro(t.income)}</strong> · Diésel est: -${formatEuro(t.estFuelCost)} · Neto: <strong class="${net >= -0.01 ? 'text-emerald-400' : 'text-rose-400'}">${net >= 0 ? '+' : ''}${formatEuro(net)}</strong>
+                  </p>
+                  ${t.note ? `<p class="text-[11px] text-slate-500 mt-0.5 truncate">📝 ${escapeHtml(t.note)}</p>` : ''}
+                </div>
+
+                <div class="flex items-center gap-1.5 shrink-0">
+                  ${pending > 0 ? `
+                    <button type="button" data-action="mark-paid" data-id="${t.id}" title="Marcar Bizum cobrado" class="tap-btn px-2.5 py-2 rounded-xl bg-amber-500 text-slate-950 font-bold text-xs">
+                      Cobrado ✓
+                    </button>
+                  ` : ''}
+                  <button type="button" data-action="delete-trip" data-id="${t.id}" aria-label="Eliminar viaje" class="tap-btn w-10 h-10 rounded-xl bg-slate-900 hover:bg-rose-500/20 border border-slate-700 text-slate-400 hover:text-rose-400 flex items-center justify-center">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                  </button>
+                </div>
+              </div>
+            `;
+          } else {
+            const f = item.data;
+            return `
+              <div class="bg-slate-800/80 border border-slate-700/80 rounded-2xl p-3.5 flex items-center justify-between gap-3">
+                <div class="min-w-0 flex-1">
+                  <div class="flex flex-wrap items-center gap-2">
+                    <span class="text-xs font-bold text-slate-300">${formatDateES(f.date)}</span>
+                    <span class="text-[11px] font-semibold px-2 py-0.5 rounded-md bg-amber-500/15 text-amber-300">
+                      ⛽ Repostaje · ${formatNum(f.liters, 2)} L
+                    </span>
+                    ${f.odometer ? `<span class="text-[11px] text-slate-400 font-mono">${Number(f.odometer).toLocaleString('es-ES')} km</span>` : ''}
+                  </div>
+                  <p class="text-xs text-slate-400 mt-1">
+                    Pagado: <strong class="text-amber-400">-${formatEuro(f.euros)}</strong> (${formatNum(f.pricePerLiter, 3)} €/L)
+                  </p>
+                  ${f.note ? `<p class="text-[11px] text-slate-500 mt-0.5 truncate">📝 ${escapeHtml(f.note)}</p>` : ''}
+                </div>
+
+                <button type="button" data-action="delete-fuel" data-id="${f.id}" aria-label="Eliminar repostaje" class="tap-btn w-10 h-10 rounded-xl bg-slate-900 hover:bg-rose-500/20 border border-slate-700 text-slate-400 hover:text-rose-400 flex items-center justify-center shrink-0">
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                </button>
+              </div>
+            `;
+          }
+        }).join('');
+      }
+
+      function renderMonthlyChart() {
+        const container = document.getElementById('chart-container');
+        const monthsMap = {};
+
+        state.trips.forEach(t => {
+          const m = (t.date || '').slice(0, 7);
+          if (!m) return;
+          if (!monthsMap[m]) monthsMap[m] = { income: 0, fuel: 0 };
+          monthsMap[m].income += Number(t.income) || 0;
+        });
+
+        state.fuels.forEach(f => {
+          const m = (f.date || '').slice(0, 7);
+          if (!m) return;
+          if (!monthsMap[m]) monthsMap[m] = { income: 0, fuel: 0 };
+          monthsMap[m].fuel += Number(f.euros) || 0;
+        });
+
+        const keys = Object.keys(monthsMap).sort().slice(-6);
+        if (keys.length === 0) {
+          container.innerHTML = `<p class="text-xs text-slate-500 text-center py-6">Añade viajes o repostajes para ver la comparativa mensual.</p>`;
+          return;
+        }
+
+        const maxVal = Math.max(20, ...keys.map(k => Math.max(monthsMap[k].income, monthsMap[k].fuel)));
+        const monthNames = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+
+        const barsHtml = keys.map(k => {
+          const [y, m] = k.split('-');
+          const label = `${monthNames[Number(m) - 1]} ${y.slice(2)}`;
+          const incPct = Math.round((monthsMap[k].income / maxVal) * 100);
+          const fuelPct = Math.round((monthsMap[k].fuel / maxVal) * 100);
+          return `
+            <div class="flex-1 min-w-[56px] flex flex-col items-center gap-1.5">
+              <div class="w-full h-28 flex items-end justify-center gap-1.5 px-1 border-b border-slate-700">
+                <div class="w-4 bg-emerald-500 rounded-t-md transition-all" style="height: ${Math.max(4, incPct)}%" title="Ingresos: ${formatEuro(monthsMap[k].income)}"></div>
+                <div class="w-4 bg-amber-500 rounded-t-md transition-all" style="height: ${Math.max(4, fuelPct)}%" title="Diésel: ${formatEuro(monthsMap[k].fuel)}"></div>
+              </div>
+              <span class="text-[11px] font-semibold text-slate-400">${label}</span>
+              <span class="text-[10px] text-slate-500">${Math.round(monthsMap[k].income)}€ / ${Math.round(monthsMap[k].fuel)}€</span>
+            </div>
+          `;
+        }).join('');
+
+        container.innerHTML = `<div class="flex items-end gap-2 pt-2">${barsHtml}</div>`;
+      }
+
+      function escapeHtml(str) {
+        return String(str).replace(/[&<>"']/g, (m) => ({
+          '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+        }[m]));
+      }
+
+      function syncSettingsInputs() {
+        document.getElementById('cfg-consumption').value = state.settings.consumption;
+        document.getElementById('cfg-weekly-target').value = state.settings.weeklyTarget;
+        document.getElementById('cfg-firebase-url').value = state.settings.firebaseUrl || '';
+        document.getElementById('f-price').value = Number(state.settings.lastDieselPrice || 1.699).toFixed(3);
+
+        const cloudBadge = document.getElementById('cloud-badge');
+        if (state.settings.firebaseUrl) {
+          cloudBadge.textContent = 'Nube Configurada';
+          cloudBadge.className = 'text-[11px] font-semibold px-2 py-0.5 rounded-full bg-sky-500/20 text-sky-300 border border-sky-500/30';
+        } else {
+          cloudBadge.textContent = 'Solo Local';
+          cloudBadge.className = 'text-[11px] font-semibold px-2 py-0.5 rounded-full bg-slate-900 text-slate-400 border border-slate-700';
+        }
+      }
+
+      function refreshAllUI() {
+        syncSettingsInputs();
+        updateJornadaPreview();
+        updateFuelPreview('euros');
+        refreshDashboard();
+        renderHistory();
+        renderMonthlyChart();
+      }
+
+      // ==========================================
+      // 5. CONTROLADORES DE INTERACCIÓN (100% FIABLES)
+      // ==========================================
+      function switchTab(tabName) {
+        ui.activeTab = tabName;
+        document.querySelectorAll('.tab-btn').forEach(btn => {
+          const isTarget = btn.dataset.tab === tabName;
+          btn.className = isTarget
+            ? 'tab-btn tap-btn rounded-xl py-2 px-2 text-xs sm:text-sm font-bold bg-emerald-500 text-slate-950 shadow'
+            : 'tab-btn tap-btn rounded-xl py-2 px-2 text-xs sm:text-sm font-semibold text-slate-400 hover:text-white';
+        });
+        document.querySelectorAll('.tab-panel').forEach(panel => {
+          panel.classList.toggle('hidden', panel.id !== `panel-${tabName}`);
+        });
+        if (tabName === 'historial') {
+          renderHistory();
+          renderMonthlyChart();
+        }
+      }
+
+      function setPaxSelection(dir, val) {
+        const numVal = Number(val);
+        if (dir === 'ida') ui.ida = numVal;
+        if (dir === 'vuelta') ui.vuelta = numVal;
+
+        const container = document.getElementById(`pills-${dir}`);
+        container.querySelectorAll('.pax-pill').forEach(pill => {
+          const active = Number(pill.dataset.val) === numVal;
+          pill.className = active
+            ? 'pax-pill tap-btn rounded-xl font-extrabold text-base bg-emerald-500 text-slate-950 border border-emerald-400'
+            : 'pax-pill tap-btn rounded-xl font-extrabold text-base bg-slate-800 text-slate-300 border border-slate-700';
+        });
+        updateJornadaPreview();
+      }
+
+      function bindEvents() {
+        // Navegación pestañas
+        document.querySelectorAll('.tab-btn').forEach(btn => {
+          btn.addEventListener('click', () => switchTab(btn.dataset.tab));
+        });
+
+        // Botón estado storage en header lleva a pestaña Datos
+        document.getElementById('btn-storage-status').addEventListener('click', () => switchTab('datos'));
+
+        // Pills de pasajeros (Ida y Vuelta)
+        document.querySelectorAll('.pax-pill').forEach(pill => {
+          pill.addEventListener('click', () => {
+            setPaxSelection(pill.dataset.dir, pill.dataset.val);
+          });
+        });
+
+        // Presets de jornada
+        document.querySelectorAll('.preset-btn').forEach(btn => {
+          btn.addEventListener('click', () => {
+            const p = btn.dataset.preset;
+            document.getElementById('j-km').value = 64;
+            if (p === 'fija-jueves') {
+              setPaxSelection('ida', 1);
+              setPaxSelection('vuelta', 1);
+              document.getElementById('j-note').value = 'Fija jueves (ida y vuelta)';
+            } else if (p === 'dia-habitual') {
+              setPaxSelection('ida', 1);
+              setPaxSelection('vuelta', 2);
+              document.getElementById('j-note').value = '1 ida + 2 vuelta';
+            } else if (p === 'coche-lleno') {
+              setPaxSelection('ida', 2);
+              setPaxSelection('vuelta', 2);
+              document.getElementById('j-note').value = '2 ida + 2 vuelta';
+            }
+            updateJornadaPreview();
+          });
+        });
+
+        // Presets de distancia
+        document.querySelectorAll('.km-preset-btn').forEach(btn => {
+          btn.addEventListener('click', () => {
+            document.getElementById('j-km').value = btn.dataset.km;
+            document.querySelectorAll('.km-preset-btn').forEach(b => {
+              const active = b === btn;
+              b.className = active
+                ? 'km-preset-btn px-2.5 py-1 rounded-lg text-xs font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
+                : 'km-preset-btn px-2.5 py-1 rounded-lg text-xs font-semibold bg-slate-900 text-slate-400 border border-slate-700';
+            });
+            updateJornadaPreview();
+          });
+        });
+
+        // Inputs en vivo de Jornada
+        ['j-date', 'j-price', 'j-km'].forEach(id => {
+          document.getElementById(id).addEventListener('input', updateJornadaPreview);
+          document.getElementById(id).addEventListener('change', updateJornadaPreview);
+        });
+
+        // Toggle Bizum pendiente
+        const pendingCheck = document.getElementById('j-has-pending');
+        const pendingBox = document.getElementById('pending-amount-box');
+        pendingCheck.addEventListener('change', () => {
+          pendingBox.classList.toggle('hidden', !pendingCheck.checked);
+        });
+
+        // GUARDAR JORNADA
+        document.getElementById('form-jornada').addEventListener('submit', async (e) => {
+          e.preventDefault();
+          const date = document.getElementById('j-date').value || getTodayISO();
+          const pricePerTrip = Math.max(0, parseFloat(document.getElementById('j-price').value) || 0);
+          const km = Math.max(0, parseFloat(document.getElementById('j-km').value) || 0);
+          const totalTrips = ui.ida + ui.vuelta;
+          const income = Number((totalTrips * pricePerTrip).toFixed(2));
+          const cons = getEffectiveConsumption().value;
+          const dieselPrice = Number(state.settings.lastDieselPrice) || 1.699;
+          const estFuelCost = Number((((km * cons) / 100) * dieselPrice).toFixed(2));
+          const hasPending = document.getElementById('j-has-pending').checked;
+          const pendingAmount = hasPending ? Math.min(income, Math.max(0, parseFloat(document.getElementById('j-pending-amount').value) || 0)) : 0;
+          const note = document.getElementById('j-note').value.trim();
+
+          const entry = {
+            id: 't_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
+            date,
+            ida: ui.ida,
+            vuelta: ui.vuelta,
+            totalTrips,
+            pricePerTrip,
+            km,
+            income,
+            estFuelCost,
+            pendingAmount,
+            note,
+            createdAt: Date.now()
+          };
+
+          state.trips.push(entry);
+          await persistState();
+
+          // Resetear formulario manteniendo fecha y tarifa
+          setPaxSelection('ida', 0);
+          setPaxSelection('vuelta', 0);
+          document.getElementById('j-has-pending').checked = false;
+          document.getElementById('pending-amount-box').classList.add('hidden');
+          document.getElementById('j-note').value = '';
+
+          refreshAllUI();
+          showToast(`✅ Jornada guardada (${totalTrips} tray. · ${formatEuro(income)})`, 'emerald');
+        });
+
+        // Presets de Repostaje
+        document.querySelectorAll('.fuel-preset-btn').forEach(btn => {
+          btn.addEventListener('click', () => {
+            document.getElementById('f-euros').value = Number(btn.dataset.euros).toFixed(2);
+            document.querySelectorAll('.fuel-preset-btn').forEach(b => {
+              const active = b === btn;
+              b.className = active
+                ? 'fuel-preset-btn tap-btn rounded-xl py-2 text-xs font-bold bg-amber-500/20 border border-amber-500/40 text-amber-300'
+                : 'fuel-preset-btn tap-btn rounded-xl py-2 text-xs font-bold bg-slate-900 border border-slate-700 text-slate-300';
+            });
+            updateFuelPreview('euros');
+          });
+        });
+
+        document.getElementById('f-euros').addEventListener('input', () => updateFuelPreview('euros'));
+        document.getElementById('f-price').addEventListener('input', () => updateFuelPreview('price'));
+        document.getElementById('f-liters').addEventListener('input', () => updateFuelPreview('liters'));
+
+        // GUARDAR REPOSTAJE
+        document.getElementById('form-repostaje').addEventListener('submit', async (e) => {
+          e.preventDefault();
+          const date = document.getElementById('f-date').value || getTodayISO();
+          const euros = Math.max(0.1, parseFloat(document.getElementById('f-euros').value) || 0);
+          const pricePerLiter = Math.max(0.1, parseFloat(document.getElementById('f-price').value) || 0);
+          const liters = Math.max(0.1, parseFloat(document.getElementById('f-liters').value) || (euros / pricePerLiter));
+          const odoRaw = document.getElementById('f-odo').value.trim();
+          const odometer = odoRaw ? parseInt(odoRaw, 10) : null;
+          const note = document.getElementById('f-note').value.trim();
+
+          const fuelEntry = {
+            id: 'f_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
+            date,
+            euros: Number(euros.toFixed(2)),
+            pricePerLiter: Number(pricePerLiter.toFixed(3)),
+            liters: Number(liters.toFixed(2)),
+            odometer,
+            note,
+            createdAt: Date.now()
+          };
+
+          state.fuels.push(fuelEntry);
+          state.settings.lastDieselPrice = fuelEntry.pricePerLiter;
+          await persistState();
+
+          document.getElementById('f-odo').value = '';
+          document.getElementById('f-note').value = '';
+          refreshAllUI();
+          showToast(`⛽ Repostaje guardado (${formatEuro(fuelEntry.euros)} · ${formatNum(fuelEntry.liters, 2)} L)`, 'amber');
+        });
+
+        // Filtros de Historial
+        document.querySelectorAll('.filter-btn').forEach(btn => {
+          btn.addEventListener('click', () => {
+            ui.filter = btn.dataset.filter;
+            document.querySelectorAll('.filter-btn').forEach(b => {
+              const active = b === btn;
+              b.className = active
+                ? 'filter-btn tap-btn px-3.5 py-2 rounded-xl text-xs font-bold bg-emerald-500 text-slate-950 shrink-0'
+                : 'filter-btn tap-btn px-3.5 py-2 rounded-xl text-xs font-semibold bg-slate-800 text-slate-300 border border-slate-700 shrink-0';
+            });
+            renderHistory();
+          });
+        });
+
+        // Acciones delegadas en Lista de Historial (Cobrar Bizum / Eliminar con Deshacer)
+        document.getElementById('history-list').addEventListener('click', async (e) => {
+          const btn = e.target.closest('button[data-action]');
+          if (!btn) return;
+          const action = btn.dataset.action;
+          const id = btn.dataset.id;
+
+          if (action === 'mark-paid') {
+            const trip = state.trips.find(t => t.id === id);
+            if (trip) {
+              const prevPending = trip.pendingAmount;
+              trip.pendingAmount = 0;
+              await persistState();
+              refreshAllUI();
+              showToast(`💸 Bizum de ${formatEuro(prevPending)} marcado como cobrado`, 'emerald');
+            }
+          } else if (action === 'delete-trip') {
+            const idx = state.trips.findIndex(t => t.id === id);
+            if (idx !== -1) {
+              const removed = state.trips.splice(idx, 1)[0];
+              await persistState();
+              refreshAllUI();
+              showToast('Jornada eliminada', 'rose', async () => {
+                state.trips.push(removed);
+                await persistState();
+                refreshAllUI();
+              });
+            }
+          } else if (action === 'delete-fuel') {
+            const idx = state.fuels.findIndex(f => f.id === id);
+            if (idx !== -1) {
+              const removed = state.fuels.splice(idx, 1)[0];
+              await persistState();
+              refreshAllUI();
+              showToast('Repostaje eliminado', 'rose', async () => {
+                state.fuels.push(removed);
+                await persistState();
+                refreshAllUI();
+              });
+            }
+          }
+        });
+
+        // Guardar Ajustes
+        document.getElementById('btn-save-settings').addEventListener('click', async () => {
+          const cons = parseFloat(document.getElementById('cfg-consumption').value);
+          const target = parseInt(document.getElementById('cfg-weekly-target').value, 10);
+          if (cons > 0) state.settings.consumption = cons;
+          if (target > 0) state.settings.weeklyTarget = target;
+          await persistState();
+          refreshAllUI();
+          showToast('⚙️ Parámetros actualizados', 'emerald');
+        });
+
+        // Exportar CSV
+        document.getElementById('btn-export-csv').addEventListener('click', () => {
+          const lines = ['Tipo;Fecha;Detalle;Km;Litros;Precio_Litro;Ingresos_EUR;Gasto_Diesel_EUR;Pendiente_Bizum_EUR;Nota'];
+          state.trips.forEach(t => {
+            lines.push(`Viaje;${t.date};"${t.ida} ida + ${t.vuelta} vuelta";${t.km};;;${String(t.income).replace('.', ',')};${String(t.estFuelCost).replace('.', ',')};${String(t.pendingAmount || 0).replace('.', ',')};"${(t.note || '').replace(/"/g, '""')}"`);
+          });
+          state.fuels.forEach(f => {
+            lines.push(`Repostaje;${f.date};"Gasolinera";${f.odometer || ''};${String(f.liters).replace('.', ',')};${String(f.pricePerLiter).replace('.', ',')};;${String(f.euros).replace('.', ',')};;"${(f.note || '').replace(/"/g, '""')}"`);
+          });
+          const blob = new Blob(['\uFEFF' + lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
+          downloadBlob(blob, `CorsaTracker_UA_${getTodayISO()}.csv`);
+          showToast('📥 CSV descargado listo para Excel', 'emerald');
+        });
+
+        // Exportar JSON
+        document.getElementById('btn-export-json').addEventListener('click', () => {
+          const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
+          downloadBlob(blob, `CorsaTracker_Backup_${getTodayISO()}.json`);
+          showToast('📦 Copia de seguridad JSON descargada', 'emerald');
+        });
+
+        // Importar JSON
+        document.getElementById('input-import-json').addEventListener('change', (e) => {
+          const file = e.target.files[0];
+          if (!file) return;
+          const reader = new FileReader();
+          reader.onload = async (ev) => {
+            try {
+              const parsed = JSON.parse(ev.target.result);
+              if (!Array.isArray(parsed.trips) || !Array.isArray(parsed.fuels)) {
+                throw new Error('Formato inválido');
+              }
+              state = {
+                trips: parsed.trips,
+                fuels: parsed.fuels,
+                settings: { ...DEFAULT_STATE.settings, ...(parsed.settings || {}) },
+                updatedAt: Date.now()
+              };
+              await persistState();
+              refreshAllUI();
+              showToast('✅ Backup restaurado correctamente', 'emerald');
+            } catch (err) {
+              showToast('El archivo JSON no es válido', 'rose');
+            }
+            e.target.value = '';
+          };
+          reader.readAsText(file);
+        });
+
+        // Sincronizar Firebase
+        document.getElementById('btn-cloud-sync').addEventListener('click', async () => {
+          const url = document.getElementById('cfg-firebase-url').value.trim();
+          state.settings.firebaseUrl = url;
+          await persistState(true);
+          syncSettingsInputs();
+          await syncWithFirebase(true);
+        });
+
+        document.getElementById('btn-cloud-disconnect').addEventListener('click', async () => {
+          state.settings.firebaseUrl = '';
+          await persistState(true);
+          syncSettingsInputs();
+          setStorageIndicator('Local DB', 'emerald');
+          showToast('Nube desconectada. Seguimos en modo local.', 'amber');
+        });
+
+        // Cargar semana de ejemplo
+        document.getElementById('btn-load-demo').addEventListener('click', async () => {
+          const today = getTodayISO();
+          const dMinus = (days) => {
+            const d = new Date();
+            d.setDate(d.getDate() - days);
+            const off = d.getTimezoneOffset() * 60000;
+            return new Date(d.getTime() - off).toISOString().slice(0, 10);
+          };
+
+          state.fuels.push({
+            id: 'f_demo_' + Date.now(),
+            date: dMinus(4),
+            euros: 20.00,
+            pricePerLiter: 1.699,
+            liters: 11.77,
+            odometer: 184200,
+            note: 'Plenoil Santa Pola (Ejemplo)',
+            createdAt: Date.now() - 400000
+          });
+
+          const demoTrips = [
+            { days: 4, ida: 1, vuelta: 2, pending: 0, note: 'Lunes: 1 ida + 2 vuelta' },
+            { days: 2, ida: 2, vuelta: 2, pending: 1.50, note: 'Miércoles: coche lleno (1 Bizum pend.)' },
+            { days: 1, ida: 2, vuelta: 1, pending: 0, note: 'Jueves: chica fija I/V + 1 ida' },
+            { days: 0, ida: 2, vuelta: 2, pending: 0, note: 'Viernes: 4 trayectos' }
+          ];
+
+          demoTrips.forEach((dt, i) => {
+            const totalTrips = dt.ida + dt.vuelta;
+            const income = totalTrips * 1.50;
+            const estFuelCost = Number((((64 * 4.7) / 100) * 1.699).toFixed(2));
+            state.trips.push({
+              id: 't_demo_' + Date.now() + '_' + i,
+              date: dMinus(dt.days),
+              ida: dt.ida,
+              vuelta: dt.vuelta,
+              totalTrips,
+              pricePerTrip: 1.50,
+              km: 64,
+              income,
+              estFuelCost,
+              pendingAmount: dt.pending,
+              note: dt.note,
+              createdAt: Date.now() - (dt.days * 86400000)
+            });
+          });
+
+          await persistState();
+          refreshAllUI();
+          switchTab('historial');
+          showToast('✨ Semana de ejemplo cargada', 'emerald');
+        });
+
+        // Borrar todos los datos (doble toque de seguridad sin confirm() nativo)
+        let resetArmed = false;
+        const resetBtn = document.getElementById('btn-reset-all');
+        resetBtn.addEventListener('click', async () => {
+          if (!resetArmed) {
+            resetArmed = true;
+            resetBtn.textContent = '⚠️ Pulsa otra vez para confirmar borrado';
+            resetBtn.classList.add('bg-rose-600', 'text-white');
+            setTimeout(() => {
+              resetArmed = false;
+              resetBtn.textContent = '🗑️ Borrar todos los datos';
+              resetBtn.classList.remove('bg-rose-600', 'text-white');
+            }, 3500);
+            return;
+          }
+          const keepUrl = state.settings.firebaseUrl;
+          state = JSON.parse(JSON.stringify(DEFAULT_STATE));
+          state.settings.firebaseUrl = keepUrl;
+          await persistState();
+          refreshAllUI();
+          resetArmed = false;
+          resetBtn.textContent = '🗑️ Borrar todos los datos';
+          resetBtn.classList.remove('bg-rose-600', 'text-white');
+          showToast('Todos los registros han sido borrados', 'rose');
+        });
+      }
+
+      function downloadBlob(blob, filename) {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+      }
+
+      // ==========================================
+      // 6. ARRANQUE DE LA APLICACIÓN
+      // ==========================================
+      async function init() {
+        const today = getTodayISO();
+        document.getElementById('j-date').value = today;
+        document.getElementById('f-date').value = today;
+
+        bindEvents();
+        await loadStateFromDB();
+        refreshAllUI();
+
+        if (state.settings.firebaseUrl) {
+          syncWithFirebase(false);
+        }
+      }
+
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', init);
+      } else {
+        init();
+      }
+    })();
+  </script>
+</body>
+</html>
